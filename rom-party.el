@@ -4,7 +4,7 @@
 ;; Maintainer: Laurence Warne
 ;; Version: 0.1
 ;; Homepage: https://github.com/LaurenceWarne/rom-party.el
-;; Package-Requires: ((emacs "28") (s "1.12.0"))
+;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0"))
 
 ;;; Commentary:
 
@@ -14,18 +14,38 @@
 
 (require 'widget)
 (require 'wid-edit)
+(require 'f)
+(require 'dash)
 (require 's)
+
+(defgroup rom-party nil
+  "Bomb Party... in Emacs."
+  :group 'applications)
+
+(defcustom rom-party-word-sources
+  (list
+   (cons "sowpods.txt" "http://norvig.com/ngrams/sowpods.txt"))
+  "A list of cons cells each of which define a source of words.
+
+The car of each cell is the name of a file include in the ROM party word list,
+and the cdr of each cell is a url to download from in the case the file does
+not exist (in `rom-party-config-directory')."
+  :group 'rom-party)
+
+(defcustom rom-party-config-directory
+  (f-join user-emacs-directory "rom-party")
+  "The directory to store rom party configuration."
+  :group 'rom-party
+  :type 'directory)
 
 (defconst rom-party-version "0.1.0")
 
 (defconst rom-party-buffer-name "*ROM Party*")
 
+(defvar rom-party--frequency-table nil)
+
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--health 2)
-
-(defgroup rom-party nil
-  "Bomb Party... in Emacs."
-  :group 'applications)
 
 ;; Faces
 
@@ -35,6 +55,24 @@
   "Face used for health in a rom party buffer.")
 
 ;; Internal functions
+
+(defun rom-party--index-words ()
+  "Using words from `rom-party-word-sources', create an index of words."
+  (f-mkdir rom-party-config-directory)
+  (let ((words (-flatten
+                (--map
+                 (-let* (((file . source) it)
+                         (path (f-join rom-party-config-directory file)))
+                   (unless (f-exists-p path)
+                     (message "Downloading %s from %s..." file source)
+                     (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                (buffer-string))
+                              'utf-8
+                              path))
+                   (s-lines (f-read-text path 'utf-8)))
+                 rom-party-word-sources))))
+    (message "Indexing words...")
+    (setq rom-party--frequency-table (rom-party--substring-frequencies words))))
 
 (defun rom-party--substring-frequencies (words)
   "Calculate substring frequences from WORDS as a hash table."
