@@ -4,7 +4,7 @@
 ;; Maintainer: Laurence Warne
 ;; Version: 0.1
 ;; Homepage: https://github.com/LaurenceWarne/rom-party.el
-;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0"))
+;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0") (ht "2.3"))
 
 ;;; Commentary:
 
@@ -17,6 +17,7 @@
 (require 'f)
 (require 'dash)
 (require 's)
+(require 'ht)
 
 (defgroup rom-party nil
   "Bomb Party... in Emacs."
@@ -43,8 +44,10 @@ not exist (in `rom-party-config-directory')."
 (defconst rom-party-buffer-name "*ROM Party*")
 
 (defvar rom-party--frequency-table nil)
+(defvar rom-party--words nil)
 
 (defvar-local rom-party--input nil)
+(defvar-local rom-party--target-substring nil)
 (defvar-local rom-party--health 2)
 
 ;; Faces
@@ -72,23 +75,33 @@ not exist (in `rom-party-config-directory')."
                    (s-lines (f-read-text path 'utf-8)))
                  rom-party-word-sources))))
     (message "Indexing words...")
-    (setq rom-party--frequency-table (rom-party--substring-frequencies words))))
+    (setq rom-party--frequency-table (rom-party--substring-frequencies words)
+          rom-party--words words)))
 
 (defun rom-party--substring-frequencies (words)
   "Calculate substring frequences from WORDS as a hash table."
-  (let ((substring-frequencies (make-hash-table :test #'equal)))
+  (let ((substring-frequencies (ht-create #'equal)))
     (-each words
       (lambda (word)
         (let ((as-list (s-split "" word t)))
           (--each (append (-zip-lists as-list (cdr as-list))
                           (-zip-lists as-list (cdr as-list) (cddr as-list)))
-            (puthash (s-join "" it)
-                     (1+ (gethash (s-join "" it) substring-frequencies 0))
-                     substring-frequencies)))))
+            (let ((key (downcase (s-join "" it))))
+              (ht-set substring-frequencies
+                      key
+                      (1+ (ht-get substring-frequencies key 0))))))))
     substring-frequencies))
 
+(defun rom-party--select-substring ()
+  "Select a substring from the hash table of indexed words."
+  (seq-random-elt (ht-keys rom-party--frequency-table)))
+
 (defun rom-party--input-activated (a &rest ignore)
-  (message (widget-value rom-party--input)))
+  (let ((user-attempt (widget-value rom-party--input)))
+    (if (and (ht-contains-p rom-party--frequency-table user-attempt)
+             (s-contains-p rom-party--target-substring user-attempt))
+        (message "Correct!")
+      (message "Incorrect!"))))
 
 (defun rom-party--redraw-buffer ()
   (interactive)
@@ -105,6 +118,9 @@ not exist (in `rom-party-config-directory')."
       (let ((ov (make-overlay (- (point) rom-party--health) (point))))
         (overlay-put ov 'face 'rom-party-health))
       (widget-insert "\n\n")
+      (widget-insert
+       (format "Target: %s\n"
+               (setq rom-party--target-substring (rom-party--select-substring))))
       (setq rom-party--input
             (widget-create 'editable-field
                            :action #'rom-party--input-activated
