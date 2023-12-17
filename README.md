@@ -2,7 +2,7 @@
 
 # rom-party.el
 
-Bomb Party... in Emacs.
+:bomb: Party... in Emacs.
 
 ## Installation
 

@@ -76,7 +76,7 @@ not exist (in `rom-party-config-directory')."
                  rom-party-word-sources))))
     (message "Indexing words...")
     (setq rom-party--frequency-table (rom-party--substring-frequencies words)
-          rom-party--words words)))
+          rom-party--words (-map #'downcase words))))
 
 (defun rom-party--substring-frequencies (words)
   "Calculate substring frequences from WORDS as a hash table."
@@ -96,21 +96,21 @@ not exist (in `rom-party-config-directory')."
   "Select a substring from the hash table of indexed words."
   (seq-random-elt (ht-keys rom-party--frequency-table)))
 
-(defun rom-party--input-activated (a &rest ignore)
-  (let ((user-attempt (widget-value rom-party--input)))
-    (if (and (ht-contains-p rom-party--frequency-table user-attempt)
+(defun rom-party--input-activated (&rest _ignore)
+  "Process the result of a user enter."
+  (let ((user-attempt (downcase (widget-value rom-party--input))))
+    (if (and (-contains-p rom-party--words user-attempt)
              (s-contains-p rom-party--target-substring user-attempt))
-        (message "Correct!")
+        (progn (message "Correct!")
+               (rom-party--draw-buffer))
       (message "Incorrect!"))))
 
-(defun rom-party--redraw-buffer ()
-  (interactive)
-  (message (widget-value rom-party--input)))
-
 (defun rom-party--draw-buffer ()
-  (let ((buf (get-buffer-create rom-party-buffer-name)))
+  "Draw the rom party buffer."
+  (let ((buf (get-buffer-create rom-party-buffer-name))
+        (inhibit-read-only t))
     (with-current-buffer buf
-      (switch-to-buffer buf)
+      (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (erase-buffer)
       (remove-overlays)
       (widget-insert "💾 Party ")
@@ -133,89 +133,6 @@ not exist (in `rom-party-config-directory')."
       ;; Focus the editable widget
       (widget-move -1 t))
     (display-buffer buf)))
-
-(defun widget-example ()
-  "Create the widgets from the Widget manual."
-  (interactive)
-  (switch-to-buffer "*Widget Example*")
-  (kill-all-local-variables)
-  (make-local-variable 'widget-example-repeat)
-  (let ((inhibit-read-only t))
-    (erase-buffer))
-  (remove-overlays)
-  (widget-insert "Here is some documentation.\n\n")
-  (widget-create 'editable-field
-                 :size 13
-                 :format "Name: %v " ; Text after the field!
-                 "My Name")
-  (widget-create 'menu-choice
-                 :tag "Choose"
-                 :value "This"
-                 :help-echo "Choose me, please!"
-                 :notify (lambda (widget &rest ignore)
-                           (message "%s is a good choice!"
-                                    (widget-value widget)))
-                 '(item :tag "This option" :value "This")
-                 '(choice-item "That option")
-                 '(editable-field :menu-tag "No option" "Thus option"))
-  (widget-create 'editable-field
-                 :format "Address: %v"
-                 "Some Place\nIn some City\nSome country.")
-  (widget-insert "\nSee also ")
-  (widget-create 'link
-                 :notify (lambda (&rest ignore)
-                           (widget-value-set widget-example-repeat
-                                             '("En" "To" "Tre"))
-                           (widget-setup))
-                 "other work")
-  (widget-insert
-   " for more information.\n\nNumbers: count to three below\n")
-  (setq widget-example-repeat
-        (widget-create 'editable-list
-                       :entry-format "%i %d %v"
-                       :notify
-                       (lambda (widget &rest ignore)
-                         (let ((old (widget-get widget
-                                                ':example-length))
-                               (new (length (widget-value widget))))
-                           (unless (eq old new)
-                             (widget-put widget ':example-length new)
-                             (message "You can count to %d." new))))
-                       :value '("One" "Eh, two?" "Five!")
-                       '(editable-field :value "three")))
-  (widget-insert "\n\nSelect multiple:\n\n")
-  (widget-create 'checkbox t)
-  (widget-insert " This\n")
-  (widget-create 'checkbox nil)
-  (widget-insert " That\n")
-  (widget-create 'checkbox
-                 :notify (lambda (&rest ignore) (message "Tickle"))
-                 t)
-  (widget-insert " Thus\n\nSelect one:\n\n")
-  (widget-create 'radio-button-choice
-                 :value "One"
-                 :notify (lambda (widget &rest ignore)
-                           (message "You selected %s"
-                                    (widget-value widget)))
-                 '(item "One") '(item "Another One.")
-                 '(item "A Final One."))
-  (widget-insert "\n")
-  (widget-create 'push-button
-                 :notify (lambda (&rest ignore)
-                           (if (= (length
-                                   (widget-value widget-example-repeat))
-                                  3)
-                               (message "Congratulation!")
-                             (error "Three was the count!")))
-                 "Apply Form")
-  (widget-insert " ")
-  (widget-create 'push-button
-                 :notify (lambda (&rest ignore)
-                           (widget-example))
-                 "Reset Form")
-  (widget-insert "\n")
-  (use-local-map widget-keymap)
-  (widget-setup))
 
 (provide 'rom-party)
 
