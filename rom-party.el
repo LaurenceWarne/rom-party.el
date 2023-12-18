@@ -46,6 +46,16 @@ not exist (in `rom-party-config-directory')."
 (defvar rom-party--frequency-table nil)
 (defvar rom-party--words nil)
 
+(defvar-keymap rom-party-keymap
+  :parent widget-keymap
+  "M-s"           #'rom-party-skip
+  "C-RET"         #'rom-party-skip)
+
+(defvar-keymap rom-party-widget-field-keymap
+  :parent widget-field-keymap
+  "M-s"           #'rom-party-skip
+  "C-RET"         #'rom-party-skip)
+
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--target-substring nil)
 (defvar-local rom-party--health 2)
@@ -125,14 +135,27 @@ not exist (in `rom-party-config-directory')."
             (widget-create 'editable-field
                            :action #'rom-party--input-activated
                            :size 13
-                           :format " Name: %v " ; Text after the field!
+                           :format "Input: %v " ; Text after the field!
+                           :keymap rom-party-widget-field-keymap
                            ""))
       (widget-insert "\n")
-      (use-local-map widget-keymap)
+      (use-local-map rom-party-keymap)
       (widget-setup)
       ;; Focus the editable widget
       (widget-move -1 t))
     (display-buffer buf)))
+
+;; Commands
+
+(defun rom-party-skip ()
+  (interactive)
+  (rom-party--draw-buffer))
+
+(defun rom-party ()
+  "Run rom party."
+  (interactive)
+  (unless rom-party--words (rom-party--index-words))
+  (rom-party--draw-buffer))
 
 (provide 'rom-party)
 
