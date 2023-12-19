@@ -43,21 +43,23 @@ not exist (in `rom-party-config-directory')."
 
 (defconst rom-party-buffer-name "*ROM Party*")
 
-(defvar rom-party--frequency-table nil)
+(defvar rom-party--table nil)
 (defvar rom-party--words nil)
 
 (defvar-keymap rom-party-keymap
   :parent widget-keymap
   "M-s"           #'rom-party-skip
+  "C-/"           #'rom-party-hint
   "C-RET"         #'rom-party-skip)
 
 (defvar-keymap rom-party-widget-field-keymap
   :parent widget-field-keymap
   "M-s"           #'rom-party-skip
+  "C-/"           #'rom-party-hint
   "C-RET"         #'rom-party-skip)
 
 (defvar-local rom-party--input nil)
-(defvar-local rom-party--target-substring nil)
+(defvar-local rom-party--prompt nil)
 (defvar-local rom-party--health 2)
 
 ;; Faces
@@ -85,32 +87,34 @@ not exist (in `rom-party-config-directory')."
                    (s-lines (f-read-text path 'utf-8)))
                  rom-party-word-sources))))
     (message "Indexing words...")
-    (setq rom-party--frequency-table (rom-party--substring-frequencies words)
+    (setq rom-party--table (rom-party--substring-frequencies words)
           rom-party--words (-map #'downcase words))))
 
 (defun rom-party--substring-frequencies (words)
   "Calculate substring frequences from WORDS as a hash table."
-  (let ((substring-frequencies (ht-create #'equal)))
+  (let ((substring-table (ht-create #'equal)))
     (-each words
       (lambda (word)
         (let ((as-list (s-split "" word t)))
           (--each (append (-zip-lists as-list (cdr as-list))
                           (-zip-lists as-list (cdr as-list) (cddr as-list)))
-            (let ((key (downcase (s-join "" it))))
-              (ht-set substring-frequencies
+            (when-let* ((key (downcase (s-join "" it)))
+                        ;; We only want prompts which are alphabetic
+                        ((string-match-p (rx bos (+ alpha) eos) key)))
+              (ht-set substring-table
                       key
-                      (1+ (ht-get substring-frequencies key 0))))))))
-    substring-frequencies))
+                      (cons (downcase word) (ht-get substring-table key))))))))
+    substring-table))
 
 (defun rom-party--select-substring ()
   "Select a substring from the hash table of indexed words."
-  (seq-random-elt (ht-keys rom-party--frequency-table)))
+  (seq-random-elt (ht-keys rom-party--table)))
 
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (let ((user-attempt (downcase (widget-value rom-party--input))))
     (if (and (-contains-p rom-party--words user-attempt)
-             (s-contains-p rom-party--target-substring user-attempt))
+             (s-contains-p rom-party--prompt user-attempt))
         (progn (message "Correct!")
                (rom-party--draw-buffer))
       (message "Incorrect!"))))
@@ -130,7 +134,7 @@ not exist (in `rom-party-config-directory')."
       (widget-insert "\n\n")
       (widget-insert
        (format "Target: %s\n"
-               (setq rom-party--target-substring (rom-party--select-substring))))
+               (setq rom-party--prompt (rom-party--select-substring))))
       (setq rom-party--input
             (widget-create 'editable-field
                            :action #'rom-party--input-activated
@@ -150,6 +154,12 @@ not exist (in `rom-party-config-directory')."
 (defun rom-party-skip ()
   (interactive)
   (rom-party--draw-buffer))
+
+(defun rom-party-hint ()
+  "Hint solutions for the current target substring to the echo area."
+  (interactive)
+  (let* ((valid (ht-get rom-party--table rom-party--prompt)))
+    (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
 
 (defun rom-party ()
   "Run rom party."
