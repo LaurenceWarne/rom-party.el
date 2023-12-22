@@ -61,6 +61,8 @@ not exist (in `rom-party-config-directory')."
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--prompt nil)
 (defvar-local rom-party--health 2)
+(defvar-local rom-party--run 0)
+(defvar-local rom-party--used-letters nil)
 
 ;; Faces
 
@@ -68,6 +70,19 @@ not exist (in `rom-party-config-directory')."
   '((((class color)) (:foreground "red" :bold t))
     (t (:bold t)))
   "Face used for health in a rom party buffer.")
+
+(defface rom-party-used-letter
+  '((((class color)) (:foreground "DimGrey"))
+    (t (:bold t)))
+  "Face used for used letters in a rom party buffer.")
+
+(defface rom-party-unused-letter
+  '((((class color)) (:box
+                      (:line-width
+                       (1 . 1)
+                       :color "DimGrey" :style none)))
+    (t (:italic t)))
+  "Face used for unused letters in a rom party buffer.")
 
 ;; Internal functions
 
@@ -122,7 +137,8 @@ not exist (in `rom-party-config-directory')."
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
   (let ((buf (get-buffer-create rom-party-buffer-name))
-        (inhibit-read-only t))
+        (inhibit-read-only t)
+        (width (window-width)))
     (with-current-buffer buf
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (erase-buffer)
@@ -142,12 +158,24 @@ not exist (in `rom-party-config-directory')."
                            :format "Input: %v " ; Text after the field!
                            :keymap rom-party-widget-field-keymap
                            ""))
-      (widget-insert "\n")
+      (widget-insert "\n\n")
+      (rom-party--render-used-letters width)
       (use-local-map rom-party-keymap)
       (widget-setup)
       ;; Focus the editable widget
       (widget-move -1 t))
     (display-buffer buf)))
+
+(defun rom-party--render-used-letters (width)
+  "Render used letters, given a window with of WIDTH."
+  (unless rom-party--used-letters
+    (setq rom-party--used-letters
+          (-zip-fill nil (number-sequence ?a (+ ?a 25)))))
+  (--each rom-party--used-letters
+    (widget-insert (format " %c" (car it)))
+    (let ((ov (make-overlay (1- (point)) (point))))
+      (overlay-put ov 'face
+                   (if (cdr it) 'rom-party-used-letter 'rom-party-unused-letter)))))
 
 ;; Commands
 
