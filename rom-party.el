@@ -60,7 +60,7 @@ not exist (in `rom-party-config-directory')."
 
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--prompt nil)
-(defvar-local rom-party--health 2)
+(defvar-local rom-party--lives 2)
 (defvar-local rom-party--run 0)
 (defvar-local rom-party--used-letters nil)
 
@@ -77,11 +77,7 @@ not exist (in `rom-party-config-directory')."
   "Face used for used letters in a rom party buffer.")
 
 (defface rom-party-unused-letter
-  '((((class color)) (:box
-                      (:line-width
-                       (1 . 1)
-                       :color "DimGrey" :style none)))
-    (t (:italic t)))
+  '((t (:bold t)))
   "Face used for unused letters in a rom party buffer.")
 
 ;; Internal functions
@@ -131,8 +127,19 @@ not exist (in `rom-party-config-directory')."
     (if (and (-contains-p rom-party--words user-attempt)
              (s-contains-p rom-party--prompt user-attempt))
         (progn (message "Correct!")
+               (cl-incf rom-party--run)
+               (--each (string-to-list user-attempt)
+                 (setcdr (assoc it rom-party--used-letters) t))
+               (when (--all-p (cdr it) rom-party--used-letters)
+                 (rom-party--reset-used-letters)
+                 (cl-incf rom-party--lives))
                (rom-party--draw-buffer))
       (message "Incorrect!"))))
+
+(defun rom-party--reset-used-letters ()
+  "Reset `rom-party--used-letters'."
+  (setq rom-party--used-letters
+        (-zip-fill nil (number-sequence ?a (+ ?a 25)))))
 
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
@@ -144,8 +151,8 @@ not exist (in `rom-party-config-directory')."
       (erase-buffer)
       (remove-overlays)
       (widget-insert "💾 Party ")
-      (widget-insert (s-repeat rom-party--health "O"))
-      (let ((ov (make-overlay (- (point) rom-party--health) (point))))
+      (widget-insert (s-repeat rom-party--lives "O"))
+      (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
         (overlay-put ov 'face 'rom-party-health))
       (widget-insert "\n\n")
       (widget-insert
@@ -168,9 +175,7 @@ not exist (in `rom-party-config-directory')."
 
 (defun rom-party--render-used-letters (width)
   "Render used letters, given a window with of WIDTH."
-  (unless rom-party--used-letters
-    (setq rom-party--used-letters
-          (-zip-fill nil (number-sequence ?a (+ ?a 25)))))
+  (unless rom-party--used-letters (rom-party--reset-used-letters))
   (--each rom-party--used-letters
     (widget-insert (format " %c" (car it)))
     (let ((ov (make-overlay (1- (point)) (point))))
