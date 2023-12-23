@@ -39,6 +39,12 @@ not exist (in `rom-party-config-directory')."
   :group 'rom-party
   :type 'directory)
 
+(defcustom rom-party-input-box-width
+  26
+  "The width of the rom party user input widget."
+  :group 'rom-party
+  :type 'integer)
+
 (defconst rom-party-version "0.1.0")
 
 (defconst rom-party-buffer-name "*ROM Party*")
@@ -141,6 +147,14 @@ not exist (in `rom-party-config-directory')."
   (setq rom-party--used-letters
         (-zip-fill nil (number-sequence ?a (+ ?a 25)))))
 
+(defun rom-party--offset-given-width (width w)
+  "Get offset for inserting an object of width W in a total width of WIDTH."
+  (max 0 (- (/ width 2) (/ w 2))))
+
+(defun rom-party--insert-offset (width w)
+  "Insert offset for width W given total width WIDTH."
+  (widget-insert (s-repeat (rom-party--offset-given-width width w) " ")))
+
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
   (let ((buf (get-buffer-create rom-party-buffer-name))
@@ -158,11 +172,12 @@ not exist (in `rom-party-config-directory')."
       (widget-insert
        (format "Target: %s\n"
                (setq rom-party--prompt (rom-party--select-substring))))
+      (rom-party--insert-offset width rom-party-input-box-width)
       (setq rom-party--input
             (widget-create 'editable-field
                            :action #'rom-party--input-activated
-                           :size 13
-                           :format "Input: %v " ; Text after the field!
+                           :size rom-party-input-box-width
+                           :format "%v" ; Text after the field!
                            :keymap rom-party-widget-field-keymap
                            ""))
       (widget-insert "\n\n")
@@ -176,6 +191,7 @@ not exist (in `rom-party-config-directory')."
 (defun rom-party--render-used-letters (width)
   "Render used letters, given a window with of WIDTH."
   (unless rom-party--used-letters (rom-party--reset-used-letters))
+  (rom-party--insert-offset width (+ 24 25))
   (--each rom-party--used-letters
     (widget-insert (format " %c" (car it)))
     (let ((ov (make-overlay (1- (point)) (point))))
@@ -185,6 +201,7 @@ not exist (in `rom-party-config-directory')."
 ;; Commands
 
 (defun rom-party-skip ()
+  "Skip the current rom party prompt."
   (interactive)
   (rom-party--draw-buffer))
 
