@@ -40,7 +40,7 @@ not exist (in `rom-party-config-directory')."
   :type 'directory)
 
 (defcustom rom-party-input-box-width
-  26
+  35
   "The width of the rom party user input widget."
   :group 'rom-party
   :type 'integer)
@@ -85,6 +85,10 @@ not exist (in `rom-party-config-directory')."
 (defface rom-party-unused-letter
   '((t (:bold t)))
   "Face used for unused letters in a rom party buffer.")
+
+(defface rom-party-input-prompt
+  '((t (:bold t :height 200 :width 200)))
+  "Face used for the rom party prompt in a rom party buffer.")
 
 ;; Internal functions
 
@@ -164,14 +168,17 @@ not exist (in `rom-party-config-directory')."
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (erase-buffer)
       (remove-overlays)
-      (widget-insert "💾 Party ")
-      (widget-insert (s-repeat rom-party--lives "O"))
+      (let ((title (concat "💾 Party " (s-repeat rom-party--lives "O"))))
+        (rom-party--insert-offset width (length title))
+        (widget-insert title))
       (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
         (overlay-put ov 'face 'rom-party-health))
       (widget-insert "\n\n")
-      (widget-insert
-       (format "Target: %s\n"
-               (setq rom-party--prompt (rom-party--select-substring))))
+      (rom-party--insert-offset width (length rom-party--prompt))
+      (widget-insert (setq rom-party--prompt (rom-party--select-substring)))
+      (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
+        (overlay-put ov 'face 'rom-party-input-prompt))
+      (widget-insert "\n")
       (rom-party--insert-offset width rom-party-input-box-width)
       (setq rom-party--input
             (widget-create 'editable-field
