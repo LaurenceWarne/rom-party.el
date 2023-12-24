@@ -12,6 +12,7 @@
 
 ;;; Code:
 
+(require 'hashtable-print-readable)
 (require 'widget)
 (require 'wid-edit)
 (require 'f)
@@ -92,39 +93,74 @@ not exist (in `rom-party-config-directory')."
 
 ;; Internal functions
 
+(defun rom-party--table-to-json (hash-table)
+  "Convert HASH-TABLE to a json string."
+  (s-join ","
+          (ht-map (lambda (k v) (format "%S: [%s]"
+                                        k
+                                        (s-join "," (-map (lambda (s) (format "%S" s)) v))))
+                  hash-table)))
+
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
   (f-mkdir rom-party-config-directory)
-  (let ((words (-flatten
-                (--map
-                 (-let* (((file . source) it)
-                         (path (f-join rom-party-config-directory file)))
-                   (unless (f-exists-p path)
-                     (message "Downloading %s from %s..." file source)
-                     (f-write (with-current-buffer (url-retrieve-synchronously source)
-                                (buffer-string))
-                              'utf-8
-                              path))
-                   (s-lines (f-read-text path 'utf-8)))
-                 rom-party-word-sources))))
-    (message "Indexing words...")
-    (setq rom-party--table (rom-party--substring-frequencies words)
-          rom-party--words (-map #'downcase words))))
+  (let ((merged-table
+         (rom-party--merge-hash-tables
+          (-map (lambda (source-entry)
+                  (-let* (((file . source) source-entry)
+                          (path (f-join rom-party-config-directory file)))
+                    (unless (f-exists-p path)
+                      (message "Downloading %s from %s..." file source)
+                      (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                 (buffer-string))
+                               'utf-8
+                               path))
+                    (let* ((index-path (rom-party--index-path path)))
+                      (if (f-exists-p index-path)
+                          (read index-path)
+                        (message "Indexing words for %s ..." path)
+                        (--doto (rom-party--substring-frequencies
+                                 (s-lines (f-read-text path 'utf-8)))
+                          ;; (f-write (prin1 it) 'utf-8 index-path)
+                          )))))
+                rom-party-word-sources))))
+    (setq rom-party--table merged-table)))
+
+(defun rom-party--merge-hash-tables (tables)
+  "Merge TABLES into one hashmap, concatenating keys where applicable.
+
+The first table is modified in place."
+  (when-let* ((first (car tables)))
+    (--each (cdr tables)
+      (ht-map
+       (lambda (k v)
+         (ht-set first k (append (ht-get first k v))))))
+    first))
+
+(defun rom-party--index-path (file-path)
+  "Return the path of the index file for FILE-PATH."
+  (concat file-path ".index"))
 
 (defun rom-party--substring-frequencies (words)
   "Calculate substring frequences from WORDS as a hash table."
   (let ((substring-table (ht-create #'equal)))
     (-each words
       (lambda (word)
-        (let ((as-list (s-split "" word t)))
-          (--each (append (-zip-lists as-list (cdr as-list))
-                          (-zip-lists as-list (cdr as-list) (cddr as-list)))
-            (when-let* ((key (downcase (s-join "" it)))
-                        ;; We only want prompts which are alphabetic
-                        ((string-match-p (rx bos (+ alpha) eos) key)))
-              (ht-set substring-table
-                      key
-                      (cons (downcase word) (ht-get substring-table key))))))))
+        (when-let* ((adjusted-word (downcase word))
+                    (length (length adjusted-word))
+                    ((< 1 length))
+                    (last-pair (substring adjusted-word (- length 2) length)))
+          (ht-set substring-table
+                  last-pair
+                  (cons adjusted-word (ht-get substring-table last-pair)))
+          (cl-loop for i from 0 below (- length 2)
+                   for sub3 = (substring adjusted-word i (+ i 3))
+                   for sub2 = (substring adjusted-word i (+ i 2))
+                   do (--each (list sub2 sub3)
+                        (when (string-match-p (rx bos (+ alpha) eos) it)
+                          (ht-set substring-table
+                                  it
+                                  (cons adjusted-word (ht-get substring-table it)))))))))
     substring-table))
 
 (defun rom-party--select-substring ()
@@ -134,7 +170,7 @@ not exist (in `rom-party-config-directory')."
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (let ((user-attempt (downcase (widget-value rom-party--input))))
-    (if (and (-contains-p rom-party--words user-attempt)
+    (if (and (-contains-p (ht-get rom-party--table rom-party--prompt) user-attempt)
              (s-contains-p rom-party--prompt user-attempt))
         (progn (message "Correct!")
                (cl-incf rom-party--run)
@@ -193,7 +229,7 @@ not exist (in `rom-party-config-directory')."
       (widget-setup)
       ;; Focus the editable widget
       (widget-move -1 t))
-    (display-buffer buf)))
+    (display-buffer buf '(display-buffer-same-window))))
 
 (defun rom-party--render-used-letters (width)
   "Render used letters, given a window with of WIDTH."
@@ -218,10 +254,11 @@ not exist (in `rom-party-config-directory')."
   (let* ((valid (ht-get rom-party--table rom-party--prompt)))
     (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
 
+;;;###autoload
 (defun rom-party ()
   "Run rom party."
   (interactive)
-  (unless rom-party--words (rom-party--index-words))
+  (unless rom-party--table (rom-party--index-words))
   (rom-party--draw-buffer))
 
 (provide 'rom-party)
