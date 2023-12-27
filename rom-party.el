@@ -88,7 +88,7 @@ not exist (in `rom-party-config-directory')."
   "Face used for unused letters in a rom party buffer.")
 
 (defface rom-party-input-prompt
-  '((t (:bold t :height 200 :width 200)))
+  '((t (:bold t :height 200)))
   "Face used for the rom party prompt in a rom party buffer.")
 
 ;; Internal functions
