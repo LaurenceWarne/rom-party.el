@@ -46,6 +46,18 @@ not exist (in `rom-party-config-directory')."
   :group 'rom-party
   :type 'integer)
 
+(defcustom rom-party-use-timer
+  t
+  "If non-nil, show and run a timer in rom party buffers."
+  :group 'rom-party
+  :type 'boolean)
+
+(defcustom rom-party-timer-seconds
+  5
+  "The number of seconds for the rom party timer."
+  :group 'rom-party
+  :type 'integer)
+
 (defconst rom-party-version "0.1.0")
 
 (defconst rom-party-buffer-name "*ROM Party*")
@@ -70,6 +82,10 @@ not exist (in `rom-party-config-directory')."
 (defvar-local rom-party--lives 2)
 (defvar-local rom-party--run 0)
 (defvar-local rom-party--used-letters nil)
+(defvar-local rom-party--timer nil)
+(defvar-local rom-party--timer-time nil)
+(defvar-local rom-party--timer-node nil)
+(defvar-local rom-party--ewoc nil)
 
 ;; Faces
 
@@ -191,9 +207,57 @@ The first table is modified in place."
   "Get offset for inserting an object of width W in a total width of WIDTH."
   (max 0 (- (/ width 2) (/ w 2))))
 
-(defun rom-party--insert-offset (width w)
-  "Insert offset for width W given total width WIDTH."
-  (widget-insert (s-repeat (rom-party--offset-given-width width w) " ")))
+(defun rom-party--insert-offset (w)
+  "Insert spaces so that text of width W will be centred."
+  (widget-insert (s-repeat (rom-party--offset-given-width (window-width) w) " ")))
+
+(defun rom-party--draw-timer (time)
+  "Draw timer with TIME.")
+
+(defun rom-party--draw-prompt ()
+  "Draw the rom party prompt."
+  (rom-party--insert-offset (length rom-party--prompt))
+  (widget-insert (setq rom-party--prompt (rom-party--select-substring)))
+  (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
+    (overlay-put ov 'face 'rom-party-input-prompt)))
+
+(defun rom-party--draw-input ()
+  "Draw the rom party input box."
+  (rom-party--insert-offset rom-party-input-box-width)
+  (setq rom-party--input
+        (widget-create 'editable-field
+                       :action #'rom-party--input-activated
+                       :size rom-party-input-box-width
+                       :format "%v" ; Text after the field!
+                       :keymap rom-party-widget-field-keymap
+                       "")))
+
+(defun rom-party--draw-letters ()
+  "Draw used/unused letters."
+  (unless rom-party--used-letters (rom-party--reset-used-letters))
+  (rom-party--insert-offset (+ 24 25))
+  (--each rom-party--used-letters
+    (widget-insert (format " %c" (car it)))
+    (let ((ov (make-overlay (1- (point)) (point))))
+      (overlay-put ov 'face
+                   (if (cdr it) 'rom-party-used-letter 'rom-party-unused-letter)))))
+
+(defun rom-party--draw-node (data)
+  "Draw a rom party node with DATA."
+  (-let* (((id . content) data))
+    (cond ((eq id 'rom-party-prompt) (rom-party--draw-prompt))
+          ((eq id 'rom-party-input) (rom-party--draw-input))
+          ((eq id 'rom-party-letters) (rom-party--draw-letters))
+          ((eq id 'rom-party-timer) (rom-party--draw-timer content))
+          (t (message "%s not known" id)))))
+
+(defun rom-party--process-timer-update ()
+  "Process a timer update."
+  (cl-decf rom-party--timer-time)
+  (let ((inhibit-read-only t))
+    (ewoc-set-data rom-party--timer-node (cons 'rom-party-timer rom-party--timer-time))
+    (when (zerop rom-party--timer-time)
+      (ewoc-invalidate rom-party--ewoc rom-party--timer-node))))
 
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
@@ -204,42 +268,32 @@ The first table is modified in place."
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (erase-buffer)
       (remove-overlays)
+      (setq rom-party--ewoc (ewoc-create #'rom-party--draw-node nil))
       (let ((title (concat "💾 Party " (s-repeat rom-party--lives "O"))))
-        (rom-party--insert-offset width (length title))
+        (rom-party--insert-offset (length title))
         (widget-insert title))
       (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
         (overlay-put ov 'face 'rom-party-health))
       (widget-insert "\n\n")
-      (rom-party--insert-offset width (length rom-party--prompt))
-      (widget-insert (setq rom-party--prompt (rom-party--select-substring)))
-      (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
-        (overlay-put ov 'face 'rom-party-input-prompt))
-      (widget-insert "\n")
-      (rom-party--insert-offset width rom-party-input-box-width)
-      (setq rom-party--input
-            (widget-create 'editable-field
-                           :action #'rom-party--input-activated
-                           :size rom-party-input-box-width
-                           :format "%v" ; Text after the field!
-                           :keymap rom-party-widget-field-keymap
-                           ""))
-      (widget-insert "\n\n")
-      (rom-party--render-used-letters width)
+
+      ;; Setup prompt and input
+      (ewoc-enter-last rom-party--ewoc (cons 'rom-party-prompt nil))
+      (ewoc-enter-last rom-party--ewoc (cons 'rom-party-input nil))
+      
+      ;; Setup timer
+      (when (and rom-party-use-timer (null rom-party--timer))
+        (setq
+         ;; rom-party--timer (run-at-time "1 sec" rom-party-timer-seconds #'rom-party--process-timer-update)
+         rom-party--timer-time rom-party-timer-seconds)
+        (ewoc-enter-last rom-party--ewoc
+                         (setq rom-party--timer-node (cons 'rom-party-timer rom-party-timer-seconds))))
+
+      (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
       (use-local-map rom-party-keymap)
       (widget-setup)
       ;; Focus the editable widget
       (widget-move -1 t))
     (display-buffer buf '(display-buffer-same-window))))
-
-(defun rom-party--render-used-letters (width)
-  "Render used letters, given a window with of WIDTH."
-  (unless rom-party--used-letters (rom-party--reset-used-letters))
-  (rom-party--insert-offset width (+ 24 25))
-  (--each rom-party--used-letters
-    (widget-insert (format " %c" (car it)))
-    (let ((ov (make-overlay (1- (point)) (point))))
-      (overlay-put ov 'face
-                   (if (cdr it) 'rom-party-used-letter 'rom-party-unused-letter)))))
 
 ;; Commands
 
