@@ -212,7 +212,8 @@ The first table is modified in place."
   (widget-insert (s-repeat (rom-party--offset-given-width (window-width) w) " ")))
 
 (defun rom-party--draw-timer (time)
-  "Draw timer with TIME.")
+  "Draw timer with TIME."
+  (widget-insert (s-repeat rom-party--timer-time "O")))
 
 (defun rom-party--draw-prompt ()
   "Draw the rom party prompt."
@@ -253,17 +254,18 @@ The first table is modified in place."
 
 (defun rom-party--process-timer-update ()
   "Process a timer update."
-  (cl-decf rom-party--timer-time)
-  (let ((inhibit-read-only t))
-    (ewoc-set-data rom-party--timer-node (cons 'rom-party-timer rom-party--timer-time))
-    (when (zerop rom-party--timer-time)
-      (ewoc-invalidate rom-party--ewoc rom-party--timer-node))))
+  (when-let ((buf (get-buffer rom-party-buffer-name)))
+    (with-current-buffer buf
+      (cl-decf rom-party--timer-time)
+      (ewoc-set-data rom-party--timer-node (cons 'rom-party-timer rom-party--timer-time))
+      (ewoc-invalidate rom-party--ewoc rom-party--timer-node)
+      (when (zerop rom-party--timer-time)
+        (message "Times up!")))))
 
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
   (let ((buf (get-buffer-create rom-party-buffer-name))
-        (inhibit-read-only t)
-        (width (window-width)))
+        (inhibit-read-only t))
     (with-current-buffer buf
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (erase-buffer)
@@ -279,16 +281,16 @@ The first table is modified in place."
       ;; Setup prompt and input
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-prompt nil))
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-input nil))
-      
+
+      (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
+
       ;; Setup timer
       (when (and rom-party-use-timer (null rom-party--timer))
         (setq
-         ;; rom-party--timer (run-at-time "1 sec" rom-party-timer-seconds #'rom-party--process-timer-update)
+         rom-party--timer (run-at-time "1 sec" rom-party-timer-seconds #'rom-party--process-timer-update)
          rom-party--timer-time rom-party-timer-seconds)
-        (ewoc-enter-last rom-party--ewoc
-                         (setq rom-party--timer-node (cons 'rom-party-timer rom-party-timer-seconds))))
-
-      (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
+        (setq rom-party--timer-node (ewoc-enter-last rom-party--ewoc (cons 'rom-party-timer rom-party-timer-seconds))))
+      
       (use-local-map rom-party-keymap)
       (widget-setup)
       ;; Focus the editable widget
