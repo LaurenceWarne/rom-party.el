@@ -254,7 +254,8 @@ The first table is modified in place."
 
 (defun rom-party--process-timer-update ()
   "Process a timer update."
-  (when-let ((buf (get-buffer rom-party-buffer-name)))
+  (when-let ((buf (get-buffer rom-party-buffer-name))
+             ((and (integerp rom-party--timer-time) (< 0 rom-party--timer-time))))
     (with-current-buffer buf
       (cl-decf rom-party--timer-time)
       (ewoc-set-data rom-party--timer-node (cons 'rom-party-timer rom-party--timer-time))
@@ -264,10 +265,12 @@ The first table is modified in place."
 
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
+  ;; ATM this function will always clear the buffer and reset the word
   (let ((buf (get-buffer-create rom-party-buffer-name))
         (inhibit-read-only t))
     (with-current-buffer buf
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
+      (when (timerp rom-party--timer) (cancel-timer rom-party--timer))
       (erase-buffer)
       (remove-overlays)
       (setq rom-party--ewoc (ewoc-create #'rom-party--draw-node nil))
@@ -285,11 +288,12 @@ The first table is modified in place."
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
 
       ;; Setup timer
-      (when (and rom-party-use-timer (null rom-party--timer))
-        (setq
-         rom-party--timer (run-at-time "1 sec" rom-party-timer-seconds #'rom-party--process-timer-update)
-         rom-party--timer-time rom-party-timer-seconds)
-        (setq rom-party--timer-node (ewoc-enter-last rom-party--ewoc (cons 'rom-party-timer rom-party-timer-seconds))))
+      (when (and rom-party-use-timer)
+        (let ((timer-max-repeats rom-party-timer-seconds))
+          (setq
+           rom-party--timer (run-at-time t 1 #'rom-party--process-timer-update)
+           rom-party--timer-time rom-party-timer-seconds
+           rom-party--timer-node (ewoc-enter-last rom-party--ewoc (cons 'rom-party-timer rom-party-timer-seconds)))))
       
       (use-local-map rom-party-keymap)
       (widget-setup)
