@@ -4,7 +4,7 @@
 ;; Maintainer: Laurence Warne
 ;; Version: 0.1
 ;; Homepage: https://github.com/LaurenceWarne/rom-party.el
-;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0") (ht "2.3"))
+;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0") (ht "2.3") (extmap "1.3"))
 
 ;;; Commentary:
 
@@ -17,6 +17,7 @@
 (require 'wid-edit)
 (require 'f)
 (require 'dash)
+(require 'extmap)
 (require 's)
 (require 'ht)
 
@@ -125,7 +126,7 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--select-prompt ()
   "Select a random prompt."
-  (seq-random-elt (ht-keys rom-party--table))
+  (symbol-name (seq-random-elt (extmap-keys rom-party--table)))
   ;; (rom-party--random-weighted (ht-map (lambda (k v) (cons k (funcall rom-party-weight-function k v))) rom-party--table))
   )
 
@@ -154,7 +155,6 @@ ITEMS is an alist of form: ((description . weight)...)."
 
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
-  (f-mkdir rom-party-config-directory)
   (let ((merged-table
          (rom-party--merge-hash-tables
           (-map (lambda (source-entry)
@@ -166,16 +166,23 @@ ITEMS is an alist of form: ((description . weight)...)."
                                  (buffer-string))
                                'utf-8
                                path))
-                    (let* ((index-path (rom-party--index-path path)))
-                      (if (f-exists-p index-path)
-                          (read index-path)
-                        (message "Indexing words for %s ..." path)
-                        (--doto (rom-party--substring-frequencies
-                                 (s-lines (f-read-text path 'utf-8)))
-                          ;; (f-write (prin1 it) 'utf-8 index-path)
-                          )))))
+                    (message "Indexing words for %s ..." path)
+                    (rom-party--substring-frequencies
+                     (s-lines (f-read-text path 'utf-8)))
+                    ;; (f-write (prin1 it) 'utf-8 index-path)
+                    ))
                 rom-party-word-sources))))
-    (setq rom-party--table merged-table)))
+    merged-table))
+
+(defun rom-party--get-or-create-index ()
+  "Using words from `rom-party-word-sources', create an index of words."
+  (f-mkdir rom-party-config-directory)
+  (let ((index-path (f-join rom-party-config-directory "index.extmap")))
+    (unless (f-exists-p index-path)
+      (extmap-from-alist index-path
+                         (--map (cons (intern (car it)) (cdr it))
+                                (ht->alist (rom-party--index-words)))))
+    (setq rom-party--table (extmap-init index-path))))
 
 (defun rom-party--merge-hash-tables (tables)
   "Merge TABLES into one hashmap, concatenating keys where applicable.
@@ -214,14 +221,10 @@ The first table is modified in place."
                                   (cons adjusted-word (ht-get substring-table it)))))))))
     substring-table))
 
-(defun rom-party--select-substring ()
-  "Select a substring from the hash table of indexed words."
-  (seq-random-elt (ht-keys rom-party--table)))
-
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (let ((user-attempt (downcase (widget-value rom-party--input))))
-    (if (and (-contains-p (ht-get rom-party--table rom-party--prompt) user-attempt)
+    (if (and (-contains-p (extmap-get rom-party--table (intern rom-party--prompt)) user-attempt)
              (s-contains-p rom-party--prompt user-attempt))
         (progn (message "Correct!")
                (cl-incf rom-party--run)
@@ -347,14 +350,14 @@ The first table is modified in place."
 (defun rom-party-hint ()
   "Hint solutions for the current target substring to the echo area."
   (interactive)
-  (let* ((valid (ht-get rom-party--table rom-party--prompt)))
+  (let* ((valid (extmap-get rom-party--table (intern rom-party--prompt))))
     (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
 
 ;;;###autoload
 (defun rom-party ()
   "Run rom party."
   (interactive)
-  (unless rom-party--table (rom-party--index-words))
+  (unless rom-party--table (rom-party--get-or-create-index))
   (rom-party--draw-buffer))
 
 (provide 'rom-party)
