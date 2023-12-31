@@ -58,6 +58,12 @@ not exist (in `rom-party-config-directory')."
   :group 'rom-party
   :type 'integer)
 
+(defcustom rom-party-weight-function
+  #'rom-party-log-weight-function
+  "Function called to weight a rom party prompt selection."
+  :group 'rom-party
+  :type 'function)
+
 (defconst rom-party-version "0.1.0")
 
 (defconst rom-party-buffer-name "*ROM Party*")
@@ -107,7 +113,36 @@ not exist (in `rom-party-config-directory')."
   '((t (:bold t :height 200)))
   "Face used for the rom party prompt in a rom party buffer.")
 
+;; Functions
+
+(defun rom-party-log-weight-function (_prompt matching)
+  "Return the logarithm of the length of MATCHING.
+
+It's purpose is for use with `rom-party-weight-function'."
+  (round (log (length matching))))
+
 ;; Internal functions
+
+(defun rom-party--select-prompt ()
+  "Select a random prompt."
+  (seq-random-elt (ht-keys rom-party--table))
+  ;; (rom-party--random-weighted (ht-map (lambda (k v) (cons k (funcall rom-party-weight-function k v))) rom-party--table))
+  )
+
+;; Credit: https://www.reddit.com/r/emacs/comments/t8nbam/comment/hzqj5ud/?utm_source=share&utm_medium=web2x&context=3
+(defun rom-party--random-weighted (items)
+  "Rerturn a random weighted item from ITEMS.
+ITEMS is an alist of form: ((description . weight)...)."
+  (let* ((rand (random (cl-reduce #'+ items :key #'cdr)))
+         (len (length items))
+         (index -1)
+         found)
+    (catch 'found
+      (while t
+        (let* ((current (nth (mod (cl-incf index) len) items))
+               (current-weight (cdr current)))
+          (when (< (setq rand (- rand current-weight)) current-weight)
+            (throw 'found (car current))))))))
 
 (defun rom-party--table-to-json (hash-table)
   "Convert HASH-TABLE to a json string."
@@ -218,7 +253,7 @@ The first table is modified in place."
 (defun rom-party--draw-prompt ()
   "Draw the rom party prompt."
   (rom-party--insert-offset (length rom-party--prompt))
-  (widget-insert (setq rom-party--prompt (rom-party--select-substring)))
+  (widget-insert (setq rom-party--prompt (rom-party--select-prompt)))
   (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
     (overlay-put ov 'face 'rom-party-input-prompt)))
 
@@ -293,7 +328,8 @@ The first table is modified in place."
           (setq
            rom-party--timer (run-at-time t 1 #'rom-party--process-timer-update)
            rom-party--timer-time rom-party-timer-seconds
-           rom-party--timer-node (ewoc-enter-last rom-party--ewoc (cons 'rom-party-timer rom-party-timer-seconds)))))
+           rom-party--timer-node (ewoc-enter-last rom-party--ewoc (cons 'rom-party-timer rom-party-timer-seconds))))
+        (add-hook 'kill-buffer-hook (lambda () (cancel-timer rom-party--timer)) nil t))
       
       (use-local-map rom-party-keymap)
       (widget-setup)
