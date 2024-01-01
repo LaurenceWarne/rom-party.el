@@ -31,9 +31,9 @@
    (cons "sowpods.txt" "http://norvig.com/ngrams/sowpods.txt"))
   "A list of cons cells each of which define a source of words.
 
-The car of each cell is the name of a file include in the ROM party word list,
-and the cdr of each cell is a url to download from in the case the file does
-not exist (the cdr is only required if the file does not exist).
+The car of each cell is the name of a file to include in the ROM party word
+list, and the cdr of each cell is a url to download from in the case the file
+does not exist (the cdr is only required if the file does not exist).
 
 Each file should be a text file with words delimited by a new line.
 
@@ -204,10 +204,6 @@ The first table is modified in place."
          (ht-set first k (append (ht-get first k v))))))
     first))
 
-(defun rom-party--index-path (file-path)
-  "Return the path of the index file for FILE-PATH."
-  (concat file-path ".index"))
-
 (defun rom-party--substring-frequencies (words)
   "Calculate substring frequences from WORDS as a hash table."
   (let ((substring-table (ht-create #'equal)))
@@ -258,16 +254,23 @@ The first table is modified in place."
   "Insert spaces so that text of width W will be centred."
   (widget-insert (s-repeat (rom-party--offset-given-width (window-width) w) " ")))
 
+(defun rom-party--insert-text-centrally (s)
+  "Insert S in the centre of the current buffer."
+  (rom-party--insert-offset (length s))
+  (widget-insert s))
+
 (defun rom-party--draw-timer (time)
   "Draw timer with TIME."
-  (widget-insert (s-repeat rom-party--timer-time "O")))
+  (let ((chars (if (cl-evenp (window-width)) (* 2 time) (max 0 (1- (* 2 time))))))
+    (rom-party--insert-text-centrally (s-repeat chars "O"))))
 
 (defun rom-party--draw-prompt ()
   "Draw the rom party prompt."
-  (rom-party--insert-offset (length rom-party--prompt))
-  (widget-insert (setq rom-party--prompt (rom-party--select-prompt)))
-  (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
-    (overlay-put ov 'face 'rom-party-input-prompt)))
+  (let ((prompt (rom-party--select-prompt)))
+    (rom-party--insert-text-centrally prompt)
+    (setq rom-party--prompt prompt)
+    (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
+      (overlay-put ov 'face 'rom-party-input-prompt))))
 
 (defun rom-party--draw-input ()
   "Draw the rom party input box."
@@ -283,12 +286,13 @@ The first table is modified in place."
 (defun rom-party--draw-letters ()
   "Draw used/unused letters."
   (unless rom-party--used-letters (rom-party--reset-used-letters))
-  (rom-party--insert-offset (+ 24 25))
+  (rom-party--insert-offset (+ 25 26))
   (--each rom-party--used-letters
-    (widget-insert (format " %c" (car it)))
-    (let ((ov (make-overlay (1- (point)) (point))))
+    (widget-insert (format "%c " (car it)))
+    (let ((ov (make-overlay (- (point) 2) (1- (point)))))
       (overlay-put ov 'face
-                   (if (cdr it) 'rom-party-used-letter 'rom-party-unused-letter)))))
+                   (if (cdr it) 'rom-party-used-letter 'rom-party-unused-letter))))
+  (widget-insert "\n"))
 
 (defun rom-party--draw-node (data)
   "Draw a rom party node with DATA."
@@ -322,8 +326,7 @@ The first table is modified in place."
       (remove-overlays)
       (setq rom-party--ewoc (ewoc-create #'rom-party--draw-node nil))
       (let ((title (concat "💾 Party " (s-repeat rom-party--lives "O"))))
-        (rom-party--insert-offset (length title))
-        (widget-insert title))
+        (rom-party--insert-text-centrally title))
       (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
         (overlay-put ov 'face 'rom-party-health))
       (widget-insert "\n\n")
