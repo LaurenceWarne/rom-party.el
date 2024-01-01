@@ -66,10 +66,10 @@ not exist (in `rom-party-config-directory')."
   :type 'function)
 
 (defconst rom-party-version "0.1.0")
-
 (defconst rom-party-buffer-name "*ROM Party*")
+(defconst rom-party-used-files-key "__used-files")
 
-(defvar rom-party--table nil)
+(defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
 
 (defvar-keymap rom-party-keymap
@@ -126,8 +126,8 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--select-prompt ()
   "Select a random prompt."
-  (symbol-name (seq-random-elt (extmap-keys rom-party--table)))
-  ;; (rom-party--random-weighted (ht-map (lambda (k v) (cons k (funcall rom-party-weight-function k v))) rom-party--table))
+  (symbol-name (seq-random-elt (extmap-keys rom-party--extmap)))
+  ;; (rom-party--random-weighted (ht-map (lambda (k v) (cons k (funcall rom-party-weight-function k v))) rom-party--extmap))
   )
 
 ;; Credit: https://www.reddit.com/r/emacs/comments/t8nbam/comment/hzqj5ud/?utm_source=share&utm_medium=web2x&context=3
@@ -145,13 +145,30 @@ ITEMS is an alist of form: ((description . weight)...)."
           (when (< (setq rand (- rand current-weight)) current-weight)
             (throw 'found (car current))))))))
 
-(defun rom-party--table-to-json (hash-table)
+(defun rom-party--extmap-to-json (hash-table)
   "Convert HASH-TABLE to a json string."
   (s-join ","
           (ht-map (lambda (k v) (format "%S: [%s]"
                                         k
                                         (s-join "," (-map (lambda (s) (format "%S" s)) v))))
                   hash-table)))
+
+(defun rom-party--desired-source-files ()
+  "Get a list of desired source files."
+  (--map (car it) rom-party-word-sources))
+
+(defun rom-party--used-source-files ()
+  "Get a list of currently used source files."
+  (extmap-get rom-party--extmap (intern rom-party-used-files-key)))
+
+(defun rom-party--index-path ()
+  "Return the path of the rom party index file."
+  (f-join rom-party-config-directory "index.extmap"))
+
+(defun rom-party--word-files-changed ()
+  "Return t if word files have changed."
+  (unless rom-party--extmap (setq rom-party--extmap (extmap-init (rom-party--index-path))))
+  (not (equal (rom-party--desired-source-files) (rom-party--used-source-files))))
 
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
@@ -168,21 +185,25 @@ ITEMS is an alist of form: ((description . weight)...)."
                                path))
                     (message "Indexing words for %s ..." path)
                     (rom-party--substring-frequencies
-                     (s-lines (f-read-text path 'utf-8)))
-                    ;; (f-write (prin1 it) 'utf-8 index-path)
-                    ))
+                     (s-lines (f-read-text path 'utf-8)))))
                 rom-party-word-sources))))
+    ;; We need to re-index if the source words change between invocations
+    (ht-set merged-table rom-party-used-files-key (rom-party--desired-source-files))
     merged-table))
 
 (defun rom-party--get-or-create-index ()
   "Using words from `rom-party-word-sources', create an index of words."
   (f-mkdir rom-party-config-directory)
-  (let ((index-path (f-join rom-party-config-directory "index.extmap")))
-    (unless (f-exists-p index-path)
+  (let* ((index-path (rom-party--index-path))
+         (file-exists (f-exists-p index-path))
+         (do-overwrite (and file-exists (rom-party--word-files-changed))))
+    (when (or (not file-exists)
+              (and do-overwrite (message "Word files changed, re-indexing...")))
       (extmap-from-alist index-path
                          (--map (cons (intern (car it)) (cdr it))
-                                (ht->alist (rom-party--index-words)))))
-    (setq rom-party--table (extmap-init index-path))))
+                                (ht->alist (rom-party--index-words)))
+                         :overwrite do-overwrite))
+    (setq rom-party--extmap (extmap-init index-path))))
 
 (defun rom-party--merge-hash-tables (tables)
   "Merge TABLES into one hashmap, concatenating keys where applicable.
@@ -224,7 +245,7 @@ The first table is modified in place."
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (let ((user-attempt (downcase (widget-value rom-party--input))))
-    (if (and (-contains-p (extmap-get rom-party--table (intern rom-party--prompt)) user-attempt)
+    (if (and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) user-attempt)
              (s-contains-p rom-party--prompt user-attempt))
         (progn (message "Correct!")
                (cl-incf rom-party--run)
@@ -350,14 +371,14 @@ The first table is modified in place."
 (defun rom-party-hint ()
   "Hint solutions for the current target substring to the echo area."
   (interactive)
-  (let* ((valid (extmap-get rom-party--table (intern rom-party--prompt))))
+  (let* ((valid (extmap-get rom-party--extmap (intern rom-party--prompt))))
     (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
 
 ;;;###autoload
 (defun rom-party ()
   "Run rom party."
   (interactive)
-  (unless rom-party--table (rom-party--get-or-create-index))
+  (when (or (null rom-party--extmap) (rom-party--word-files-changed)) (rom-party--get-or-create-index))
   (rom-party--draw-buffer))
 
 (provide 'rom-party)
