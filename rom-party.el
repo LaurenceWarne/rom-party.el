@@ -27,12 +27,15 @@
 
 (defcustom rom-party-word-sources
   (list
+   ;; See also https://www.reddit.com/r/BombParty/comments/3lehxq/a_nearly_exhaustive_subset_of_the_bombparty/
    (cons "sowpods.txt" "http://norvig.com/ngrams/sowpods.txt"))
   "A list of cons cells each of which define a source of words.
 
 The car of each cell is the name of a file include in the ROM party word list,
 and the cdr of each cell is a url to download from in the case the file does
 not exist (the cdr is only required if the file does not exist).
+
+Each file should be a text file with words delimited by a new line.
 
 The file may be an absolute path, else is assumed to be relative to
 `rom-party-config-directory'.  Any downloaded files will also be placed in this
@@ -153,23 +156,27 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
-  (let ((merged-table
-         (rom-party--merge-hash-tables
-          (-map (lambda (source-entry)
-                  (-let* (((file . source) source-entry)
-                          (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
-                    (unless (f-exists-p path)
-                      (message "Downloading %s from %s..." file source)
-                      (f-write (with-current-buffer (url-retrieve-synchronously source)
-                                 (buffer-string))
-                               'utf-8
-                               path))
-                    (message "Indexing words for %s ..." path)
-                    (rom-party--substring-frequencies
-                     (s-lines (f-read-text path 'utf-8)))))
-                rom-party-word-sources))))
+  (let* ((processed-words-table (ht-create #'equal))
+         (merged-table
+          (rom-party--merge-hash-tables
+           (-map (lambda (source-entry)
+                   (-let* (((file . source) source-entry)
+                           (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
+                     (unless (f-exists-p path)
+                       (message "Downloading %s from %s..." file source)
+                       (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                  (buffer-string))
+                                'utf-8
+                                path))
+                     (message "Indexing words for %s ..." path)
+                     (let ((words (--remove (ht-contains-p processed-words-table it)
+                                            (s-lines (f-read-text path 'utf-8)))))
+                       (--each words (ht-set processed-words-table it t))
+                       (rom-party--substring-frequencies words))))
+                 rom-party-word-sources))))
     ;; We need to re-index if the source words change between invocations
     (ht-set merged-table rom-party-used-files-key (rom-party--desired-source-files))
+    (message "Indexed a total of %s words" (ht-size processed-words-table))
     merged-table))
 
 (defun rom-party--get-or-create-index ()
