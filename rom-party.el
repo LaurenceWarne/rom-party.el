@@ -32,18 +32,25 @@
 
 The car of each cell is the name of a file include in the ROM party word list,
 and the cdr of each cell is a url to download from in the case the file does
-not exist (in `rom-party-config-directory')."
+not exist (the cdr is only required if the file does not exist).
+
+The file may be an absolute path, else is assumed to be relative to
+`rom-party-config-directory'.  Any downloaded files will also be placed in this
+directory.
+
+Note changing the value of this variable will prompt a re-indexing, even within
+the same Emacs session."
   :group 'rom-party)
 
 (defcustom rom-party-config-directory
   (f-join user-emacs-directory "rom-party")
-  "The directory to store rom party configuration."
+  "The directory used to store rom party configuration."
   :group 'rom-party
   :type 'directory)
 
 (defcustom rom-party-input-box-width
   35
-  "The width of the rom party user input widget."
+  "The width (in characters) of the rom party user input widget."
   :group 'rom-party
   :type 'integer)
 
@@ -55,7 +62,7 @@ not exist (in `rom-party-config-directory')."
 
 (defcustom rom-party-timer-seconds
   5
-  "The number of seconds for the rom party timer."
+  "The number of starting seconds for the rom party timer."
   :group 'rom-party
   :type 'integer)
 
@@ -109,7 +116,6 @@ not exist (in `rom-party-config-directory')."
 (defface rom-party-unused-letter
   '((t (:bold t)))
   "Face used for unused letters in a rom party buffer.")
-
 (defface rom-party-input-prompt
   '((t (:bold t :height 200)))
   "Face used for the rom party prompt in a rom party buffer.")
@@ -126,32 +132,7 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--select-prompt ()
   "Select a random prompt."
-  (symbol-name (seq-random-elt (extmap-keys rom-party--extmap)))
-  ;; (rom-party--random-weighted (ht-map (lambda (k v) (cons k (funcall rom-party-weight-function k v))) rom-party--extmap))
-  )
-
-;; Credit: https://www.reddit.com/r/emacs/comments/t8nbam/comment/hzqj5ud/?utm_source=share&utm_medium=web2x&context=3
-(defun rom-party--random-weighted (items)
-  "Rerturn a random weighted item from ITEMS.
-ITEMS is an alist of form: ((description . weight)...)."
-  (let* ((rand (random (cl-reduce #'+ items :key #'cdr)))
-         (len (length items))
-         (index -1)
-         found)
-    (catch 'found
-      (while t
-        (let* ((current (nth (mod (cl-incf index) len) items))
-               (current-weight (cdr current)))
-          (when (< (setq rand (- rand current-weight)) current-weight)
-            (throw 'found (car current))))))))
-
-(defun rom-party--extmap-to-json (hash-table)
-  "Convert HASH-TABLE to a json string."
-  (s-join ","
-          (ht-map (lambda (k v) (format "%S: [%s]"
-                                        k
-                                        (s-join "," (-map (lambda (s) (format "%S" s)) v))))
-                  hash-table)))
+  (symbol-name (seq-random-elt (extmap-keys rom-party--extmap))))
 
 (defun rom-party--desired-source-files ()
   "Get a list of desired source files."
@@ -176,7 +157,7 @@ ITEMS is an alist of form: ((description . weight)...)."
          (rom-party--merge-hash-tables
           (-map (lambda (source-entry)
                   (-let* (((file . source) source-entry)
-                          (path (f-join rom-party-config-directory file)))
+                          (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
                     (unless (f-exists-p path)
                       (message "Downloading %s from %s..." file source)
                       (f-write (with-current-buffer (url-retrieve-synchronously source)
@@ -369,7 +350,7 @@ The first table is modified in place."
   (rom-party--draw-buffer))
 
 (defun rom-party-hint ()
-  "Hint solutions for the current target substring to the echo area."
+  "Hint solutions for the current prompt in the echo area."
   (interactive)
   (let* ((valid (extmap-get rom-party--extmap (intern rom-party--prompt))))
     (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
