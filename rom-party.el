@@ -12,7 +12,6 @@
 
 ;;; Code:
 
-(require 'hashtable-print-readable)
 (require 'widget)
 (require 'wid-edit)
 (require 'f)
@@ -77,7 +76,8 @@ the same Emacs session."
 
 (defconst rom-party-version "0.1.0")
 (defconst rom-party-buffer-name "*ROM Party*")
-(defconst rom-party-used-files-key "__used-files")
+(defconst rom-party--used-files-key "__used-files")
+(defconst rom-party--letter-offset (+ 24 25))
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
@@ -119,6 +119,7 @@ the same Emacs session."
 (defface rom-party-unused-letter
   '((t (:bold t)))
   "Face used for unused letters in a rom party buffer.")
+
 (defface rom-party-input-prompt
   '((t (:bold t :height 200)))
   "Face used for the rom party prompt in a rom party buffer.")
@@ -143,7 +144,7 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--used-source-files ()
   "Get a list of currently used source files."
-  (extmap-get rom-party--extmap (intern rom-party-used-files-key)))
+  (extmap-get rom-party--extmap (intern rom-party--used-files-key)))
 
 (defun rom-party--index-path ()
   "Return the path of the rom party index file."
@@ -175,7 +176,7 @@ It's purpose is for use with `rom-party-weight-function'."
                        (rom-party--substring-frequencies words))))
                  rom-party-word-sources))))
     ;; We need to re-index if the source words change between invocations
-    (ht-set merged-table rom-party-used-files-key (rom-party--desired-source-files))
+    (ht-set merged-table rom-party--used-files-key (rom-party--desired-source-files))
     (message "Indexed a total of %s words" (ht-size processed-words-table))
     merged-table))
 
@@ -248,7 +249,7 @@ The first table is modified in place."
 
 (defun rom-party--offset-given-width (width w)
   "Get offset for inserting an object of width W in a total width of WIDTH."
-  (max 0 (- (/ width 2) (/ w 2))))
+  (max 0 (/ (- width w) 2)))
 
 (defun rom-party--insert-offset (w)
   "Insert spaces so that text of width W will be centred."
@@ -261,8 +262,9 @@ The first table is modified in place."
 
 (defun rom-party--draw-timer (time)
   "Draw timer with TIME."
-  (let ((chars (if (cl-evenp (window-width)) (* 2 time) (max 0 (1- (* 2 time))))))
-    (rom-party--insert-text-centrally (s-repeat chars "O"))))
+  ;; Aligning with the input box looks nicer than aligning with the window
+  (rom-party--insert-offset rom-party--letter-offset)
+  (widget-insert (s-repeat (* 2 time) "O")))
 
 (defun rom-party--draw-prompt ()
   "Draw the rom party prompt."
@@ -270,6 +272,7 @@ The first table is modified in place."
     (rom-party--insert-text-centrally prompt)
     (setq rom-party--prompt prompt)
     (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
+      ;; The :height attribute uncenters the text
       (overlay-put ov 'face 'rom-party-input-prompt))))
 
 (defun rom-party--draw-input ()
@@ -281,12 +284,13 @@ The first table is modified in place."
                        :size rom-party-input-box-width
                        :format "%v" ; Text after the field!
                        :keymap rom-party-widget-field-keymap
-                       "")))
+                       ""))
+  (widget-insert "\n"))
 
 (defun rom-party--draw-letters ()
   "Draw used/unused letters."
   (unless rom-party--used-letters (rom-party--reset-used-letters))
-  (rom-party--insert-offset (+ 25 26))
+  (rom-party--insert-offset rom-party--letter-offset)
   (--each rom-party--used-letters
     (widget-insert (format "%c " (car it)))
     (let ((ov (make-overlay (- (point) 2) (1- (point)))))
@@ -329,7 +333,7 @@ The first table is modified in place."
         (rom-party--insert-text-centrally title))
       (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
         (overlay-put ov 'face 'rom-party-health))
-      (widget-insert "\n\n")
+      (widget-insert "\n")
 
       ;; Setup prompt and input
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-prompt nil))
