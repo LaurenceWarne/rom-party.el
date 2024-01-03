@@ -74,6 +74,14 @@ the same Emacs session."
   :group 'rom-party
   :type 'function)
 
+(defcustom rom-party-prompt-filter
+  (rom-party-prompt-filter 5)
+  "Function called to filter rom party prompts.
+
+It should take two arguments, the first of which is the prompt itself, and the second, the words matching the prompt."
+  :group 'rom-party
+  :type 'function)
+
 (defconst rom-party-version "0.1.0")
 (defconst rom-party-buffer-name "*ROM Party*")
 (defconst rom-party--used-files-key "__used-files")
@@ -132,11 +140,18 @@ the same Emacs session."
 It's purpose is for use with `rom-party-weight-function'."
   (round (log (length matching))))
 
+(defun rom-party-prompt-filter (min-words)
+  "Return a function returning false for prompts with less than MIN-WORDS words."
+  (lambda (prompt words) (>= (length words) min-words)))
+
 ;; Internal functions
 
 (defun rom-party--select-prompt ()
   "Select a random prompt."
-  (symbol-name (seq-random-elt (extmap-keys rom-party--extmap))))
+  (let* ((choice (symbol-name (seq-random-elt (extmap-keys rom-party--extmap))))
+         (matching (extmap-get rom-party--extmap (intern choice))))
+    (or (and (funcall rom-party-prompt-filter choice matching) choice)
+        (rom-party--select-prompt))))
 
 (defun rom-party--desired-source-files ()
   "Get a list of desired source files."
