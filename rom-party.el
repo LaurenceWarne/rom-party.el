@@ -24,7 +24,7 @@
 
 (defgroup rom-party nil
   "Bomb Party... in Emacs."
-  :group 'applications)
+  :group 'games)
 
 (defcustom rom-party-word-sources
   (list
@@ -53,20 +53,17 @@ the same Emacs session."
   :group 'rom-party
   :type 'directory)
 
-(defcustom rom-party-input-box-width
-  35
+(defcustom rom-party-input-box-width 35
   "The width (in characters) of the rom party user input widget."
   :group 'rom-party
   :type 'integer)
 
-(defcustom rom-party-use-timer
-  t
+(defcustom rom-party-use-timer t
   "If non-nil, show and run a timer in rom party buffers."
   :group 'rom-party
   :type 'boolean)
 
-(defcustom rom-party-timer-seconds
-  5
+(defcustom rom-party-timer-seconds 5
   "The number of starting seconds for the rom party timer."
   :group 'rom-party
   :type 'integer)
@@ -76,6 +73,11 @@ the same Emacs session."
   "Function called to weight a rom party prompt selection."
   :group 'rom-party
   :type 'function)
+
+(defcustom rom-party-skip-on-end-of-timer t
+  "If non-nil, issue a new prompt when the timer is up."
+  :group 'rom-party
+  :type 'boolean)
 
 (defcustom rom-party-prompt-filter
   (lambda (_prompt words) (>= (length words) 5))
@@ -106,6 +108,11 @@ second, the words matching the prompt."
   "C-/"           #'rom-party-hint
   "C-RET"         #'rom-party-skip)
 
+(defvar-keymap rom-party--game-over-keymap
+  :parent widget-field-keymap
+  "r"             #'rom-party-skip
+  "q"             #'kill-this-buffer)
+
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--prompt nil)
 (defvar-local rom-party--lives 2)
@@ -115,6 +122,7 @@ second, the words matching the prompt."
 (defvar-local rom-party--timer-time nil)
 (defvar-local rom-party--timer-node nil)
 (defvar-local rom-party--ewoc nil)
+(defvar-local rom-party--game-over nil)
 
 ;; Faces
 
@@ -245,18 +253,19 @@ The first table is modified in place."
 
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
-  (let ((user-attempt (downcase (widget-value rom-party--input))))
-    (if (and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) user-attempt)
-             (s-contains-p rom-party--prompt user-attempt))
-        (progn (message "Correct!")
-               (cl-incf rom-party--run)
-               (--each (string-to-list user-attempt)
-                 (setcdr (assoc it rom-party--used-letters) t))
-               (when (--all-p (cdr it) rom-party--used-letters)
-                 (rom-party--reset-used-letters)
-                 (cl-incf rom-party--lives))
-               (rom-party--draw-buffer))
-      (message "Incorrect!"))))
+  (unless rom-party--game-over
+    (let ((user-attempt (downcase (widget-value rom-party--input))))
+      (if (and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) user-attempt)
+               (s-contains-p rom-party--prompt user-attempt))
+          (progn (message "Correct!")
+                 (cl-incf rom-party--run)
+                 (--each (string-to-list user-attempt)
+                   (setcdr (assoc it rom-party--used-letters) t))
+                 (when (--all-p (cdr it) rom-party--used-letters)
+                   (rom-party--reset-used-letters)
+                   (cl-incf rom-party--lives))
+                 (rom-party--draw-buffer))
+        (message "Incorrect!")))))
 
 (defun rom-party--reset-used-letters ()
   "Reset `rom-party--used-letters'."
@@ -326,13 +335,26 @@ The first table is modified in place."
 (defun rom-party--process-timer-update ()
   "Process a timer update."
   (when-let ((buf (get-buffer rom-party-buffer-name))
-             ((and (integerp rom-party--timer-time) (< 0 rom-party--timer-time))))
+             ((and (integerp rom-party--timer-time) (<= 0 rom-party--timer-time))))
     (with-current-buffer buf
       (cl-decf rom-party--timer-time)
       (ewoc-set-data rom-party--timer-node (cons 'rom-party-timer rom-party--timer-time))
       (ewoc-invalidate rom-party--ewoc rom-party--timer-node)
       (when (zerop rom-party--timer-time)
-        (message "Times up!")))))
+        (cl-decf rom-party--lives)
+        (if (zerop rom-party--lives)
+            (rom-party--process-no-lives)
+          (message "Times up!")
+          (when rom-party-skip-on-end-of-timer (rom-party-skip)))))))
+
+(defun rom-party--process-no-lives ()
+  "Reset the buffer state when the user has no lives."
+  (setq rom-party--game-over t)
+  (goto-char (point-max))
+  (widget-insert "Game over!\n")
+  (widget-insert "  [r] Start Again\n")
+  (widget-insert "  [q] Quit")
+  (use-local-map rom-party--game-over-keymap))
 
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
