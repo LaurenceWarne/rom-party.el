@@ -4,7 +4,7 @@
 ;; Maintainer: Laurence Warne
 ;; Version: 0.1
 ;; Homepage: https://github.com/LaurenceWarne/rom-party.el
-;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0") (ht "2.3") (extmap "1.3"))
+;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0") (ht "2.3") (extmap "1.3") (compat "29.1.4.4"))
 
 ;;; Commentary:
 
@@ -13,6 +13,7 @@
 ;;; Code:
 
 (require 'widget)
+(require 'compat)
 (require 'wid-edit)
 (require 'f)
 (require 'dash)
@@ -388,5 +389,4 @@ The first table is modified in place."
   (rom-party--draw-buffer))
 
 (provide 'rom-party)
-
 ;;; rom-party.el ends here
