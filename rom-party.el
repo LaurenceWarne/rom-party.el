@@ -75,7 +75,7 @@ the same Emacs session."
   :type 'function)
 
 (defcustom rom-party-prompt-filter
-  (rom-party-prompt-filter 5)
+  (lambda (prompt words) (>= (length words) 5))
   "Function called to filter rom party prompts.
 
 It should take two arguments, the first of which is the prompt itself, and the second, the words matching the prompt."
@@ -139,10 +139,6 @@ It should take two arguments, the first of which is the prompt itself, and the s
 
 It's purpose is for use with `rom-party-weight-function'."
   (round (log (length matching))))
-
-(defun rom-party-prompt-filter (min-words)
-  "Return a function returning false for prompts with less than MIN-WORDS words."
-  (lambda (prompt words) (>= (length words) min-words)))
 
 ;; Internal functions
 
