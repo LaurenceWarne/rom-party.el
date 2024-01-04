@@ -12,14 +12,15 @@
 
 ;;; Code:
 
-(require 'widget)
 (require 'compat)
-(require 'wid-edit)
-(require 'f)
 (require 'dash)
+(require 'ewoc)
 (require 'extmap)
-(require 's)
+(require 'f)
 (require 'ht)
+(require 's)
+(require 'wid-edit)
+(require 'widget)
 
 (defgroup rom-party nil
   "Bomb Party... in Emacs."
@@ -43,7 +44,8 @@ directory.
 
 Note changing the value of this variable will prompt a re-indexing, even within
 the same Emacs session."
-  :group 'rom-party)
+  :group 'rom-party
+  :type '(alist :key-type string :value-type string))
 
 (defcustom rom-party-config-directory
   (f-join user-emacs-directory "rom-party")
@@ -76,10 +78,11 @@ the same Emacs session."
   :type 'function)
 
 (defcustom rom-party-prompt-filter
-  (lambda (prompt words) (>= (length words) 5))
+  (lambda (_prompt words) (>= (length words) 5))
   "Function called to filter rom party prompts.
 
-It should take two arguments, the first of which is the prompt itself, and the second, the words matching the prompt."
+It should take two arguments, the first of which is the prompt itself, and the
+second, the words matching the prompt."
   :group 'rom-party
   :type 'function)
 
@@ -214,7 +217,8 @@ The first table is modified in place."
     (--each (cdr tables)
       (ht-map
        (lambda (k v)
-         (ht-set first k (append (ht-get first k v))))))
+         (ht-set first k (append (ht-get first k v))))
+       it))
     first))
 
 (defun rom-party--substring-frequencies (words)
