@@ -68,6 +68,11 @@ the same Emacs session."
   :group 'rom-party
   :type 'integer)
 
+(defcustom rom-party-starting-lives 2
+  "The number of lives to start off with."
+  :group 'rom-party
+  :type 'integer)
+
 (defcustom rom-party-weight-function
   #'rom-party-log-weight-function
   "Function called to weight a rom party prompt selection."
@@ -109,13 +114,12 @@ second, the words matching the prompt."
   "C-RET"         #'rom-party-skip)
 
 (defvar-keymap rom-party--game-over-keymap
-  :parent widget-field-keymap
   "r"             #'rom-party-skip
   "q"             #'kill-this-buffer)
 
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--prompt nil)
-(defvar-local rom-party--lives 2)
+(defvar-local rom-party--lives rom-party-starting-lives)
 (defvar-local rom-party--run 0)
 (defvar-local rom-party--used-letters nil)
 (defvar-local rom-party--timer nil)
@@ -143,6 +147,10 @@ second, the words matching the prompt."
 (defface rom-party-input-prompt
   '((t (:bold t :height 200)))
   "Face used for the rom party prompt in a rom party buffer.")
+
+(defface rom-party-game-over
+  '((t (:bold t :underline t)))
+  "Face used for the game over title in a rom party buffer.")
 
 ;; Functions
 
@@ -342,7 +350,7 @@ The first table is modified in place."
       (ewoc-invalidate rom-party--ewoc rom-party--timer-node)
       (when (zerop rom-party--timer-time)
         (cl-decf rom-party--lives)
-        (if (zerop rom-party--lives)
+        (if (<= rom-party--lives 0)
             (rom-party--process-no-lives)
           (message "Times up!")
           (when rom-party-skip-on-end-of-timer (rom-party-skip)))))))
@@ -351,10 +359,15 @@ The first table is modified in place."
   "Reset the buffer state when the user has no lives."
   (setq rom-party--game-over t)
   (goto-char (point-max))
-  (widget-insert "Game over!\n")
-  (widget-insert "  [r] Start Again\n")
-  (widget-insert "  [q] Quit")
-  (use-local-map rom-party--game-over-keymap))
+  (let* ((text "Game over!")
+         (offset (rom-party--offset-given-width (window-width) (length text))))
+    (rom-party--insert-text-centrally text)
+    (let ((ov (make-overlay (- (point) (length text)) (point))))
+      (overlay-put ov 'face 'rom-party-game-over))
+    (widget-insert "\n\n")
+    (widget-insert (format "%s[r] Start Again\n" (s-repeat offset " ")))
+    (widget-insert (format "%s[q] Quit\n" (s-repeat offset " "))))
+  (set-transient-map rom-party--game-over-keymap ))
 
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
@@ -369,6 +382,8 @@ The first table is modified in place."
       (setq rom-party--ewoc (ewoc-create #'rom-party--draw-node nil))
       (let ((title (concat "💾 Party " (s-repeat rom-party--lives "O"))))
         (rom-party--insert-text-centrally title))
+
+      (when (<= rom-party--lives 0) (setq rom-party--lives rom-party-starting-lives))
       (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
         (overlay-put ov 'face 'rom-party-health))
       (widget-insert "\n")
