@@ -115,6 +115,7 @@ second, the words matching the prompt."
 
 (defvar-keymap rom-party--game-over-keymap
   "r"             #'rom-party-skip
+  "M-s"           #'rom-party-skip
   "q"             #'kill-this-buffer)
 
 (defvar-local rom-party--input nil)
@@ -366,8 +367,11 @@ The first table is modified in place."
       (overlay-put ov 'face 'rom-party-game-over))
     (widget-insert "\n\n")
     (widget-insert (format "%s[r] Start Again\n" (s-repeat offset " ")))
-    (widget-insert (format "%s[q] Quit\n" (s-repeat offset " "))))
-  (set-transient-map rom-party--game-over-keymap ))
+    (widget-insert (format "%s[q] Quit\n" (s-repeat offset " ")))
+    (forward-line -1)
+    (end-of-line))
+  (use-local-map rom-party--game-over-keymap)
+  (buffer-disable-undo))
 
 (defun rom-party--draw-buffer ()
   "Draw the rom party buffer."
@@ -377,6 +381,11 @@ The first table is modified in place."
     (with-current-buffer buf
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (when (timerp rom-party--timer) (cancel-timer rom-party--timer))
+      (when rom-party--game-over  ; Assume we've restarted
+        (setq rom-party--game-over nil
+              rom-party--lives rom-party-starting-lives)
+        (rom-party--reset-used-letters)
+        (buffer-enable-undo))
       (erase-buffer)
       (remove-overlays)
       (setq rom-party--ewoc (ewoc-create #'rom-party--draw-node nil))
@@ -395,7 +404,7 @@ The first table is modified in place."
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
 
       ;; Setup timer
-      (when (and rom-party-use-timer)
+      (when rom-party-use-timer
         (let ((timer-max-repeats rom-party-timer-seconds))
           (setq
            rom-party--timer (run-at-time t 1 #'rom-party--process-timer-update)
