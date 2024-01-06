@@ -12,6 +12,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'compat)
 (require 'dash)
 (require 'ewoc)
@@ -93,10 +94,28 @@ second, the words matching the prompt."
   :group 'rom-party
   :type 'function)
 
+(defcustom rom-party-configurations
+  (list rom-party-classic-configuration rom-party-infinite-configuration)
+  "A list of usable rom party configurations."
+  :group 'rom-party
+  :type '(repeat object))
+
+(defcustom rom-party-default-configuration
+  rom-party-classic-configuration
+  "The default rom party configuration.
+
+rom party configurations are used to determine whether to use a timer and how
+prompts are selected.
+
+See `rom-party-configurations' for a list of available configurations,
+alternatively you may define your own, see `rom-party-configuration'.")
+
 (defconst rom-party-version "0.1.0")
 (defconst rom-party-buffer-name "*ROM Party*")
 (defconst rom-party--used-files-key "__used-files")
 (defconst rom-party--letter-offset (+ 24 25))
+(defconst rom-party-classic-configuration (rom-party-configuration :show-timer t))
+(defconst rom-party-infinite-configuration (rom-party-configuration :show-timer nil))
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
@@ -128,6 +147,7 @@ second, the words matching the prompt."
 (defvar-local rom-party--timer-node nil)
 (defvar-local rom-party--ewoc nil)
 (defvar-local rom-party--game-over nil)
+(defvar-local rom-party--configuration rom-party-default-configuration)
 
 ;; Faces
 
@@ -420,6 +440,19 @@ The first table is modified in place."
       ;; Focus the editable widget
       (widget-move -1 t))
     (display-buffer buf '(display-buffer-same-window))))
+
+;; Classes
+
+(defclass rom-party-configuration ()
+  ((show-timer :initarg :show-timer
+               :type boolean
+               :custom 'boolean
+               :documentation "If non-nil show a timer in rom-party buffers when using this configuration."))
+  "A class holding configuration for rom party, e.g. how to choose prompts.")
+
+(cl-defmethod rom-party-select-prompt ((_configuration rom-party-configuration))
+  "Select a rom party prompt for this configuration."
+  (rom-party--select-prompt))
 
 ;; Commands
 
