@@ -23,6 +23,21 @@
 (require 'wid-edit)
 (require 'widget)
 
+;;; Classes
+
+(defclass rom-party-configuration ()
+  ((show-timer :initarg :show-timer
+               :type boolean
+               :custom 'boolean
+               :documentation "If non-nil show a timer in rom-party buffers when using this configuration."))
+  "A class holding configuration for rom party, e.g. how to choose prompts.")
+
+(cl-defmethod rom-party-select-prompt ((_configuration rom-party-configuration))
+  "Select a rom party prompt for this configuration."
+  (rom-party--select-prompt))
+
+;;; Custom variables
+
 (defgroup rom-party nil
   "Bomb Party... in Emacs."
   :group 'games)
@@ -58,6 +73,14 @@ the same Emacs session."
   "The width (in characters) of the rom party user input widget."
   :group 'rom-party
   :type 'integer)
+
+(defcustom rom-party-classic-configuration (rom-party-configuration :show-timer t)
+  "The \"classic\" rom party configuration."
+  :type 'object)
+
+(defcustom rom-party-infinite-configuration (rom-party-configuration :show-timer nil)
+  "The \"infinite\" rom party configuration."
+  :type 'object)
 
 (defcustom rom-party-use-timer t
   "If non-nil, show and run a timer in rom party buffers."
@@ -110,12 +133,12 @@ prompts are selected.
 See `rom-party-configurations' for a list of available configurations,
 alternatively you may define your own, see `rom-party-configuration'.")
 
+;;; Constants
+
 (defconst rom-party-version "0.1.0")
 (defconst rom-party-buffer-name "*ROM Party*")
 (defconst rom-party--used-files-key "__used-files")
 (defconst rom-party--letter-offset (+ 24 25))
-(defconst rom-party-classic-configuration (rom-party-configuration :show-timer t))
-(defconst rom-party-infinite-configuration (rom-party-configuration :show-timer nil))
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
@@ -427,7 +450,7 @@ The first table is modified in place."
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
 
       ;; Setup timer
-      (when rom-party-use-timer
+      (when (oref rom-party--configuration show-timer)
         (let ((timer-max-repeats rom-party-timer-seconds))
           (setq
            rom-party--timer (run-at-time t 1 #'rom-party--process-timer-update)
@@ -441,20 +464,7 @@ The first table is modified in place."
       (widget-move -1 t))
     (display-buffer buf '(display-buffer-same-window))))
 
-;; Classes
-
-(defclass rom-party-configuration ()
-  ((show-timer :initarg :show-timer
-               :type boolean
-               :custom 'boolean
-               :documentation "If non-nil show a timer in rom-party buffers when using this configuration."))
-  "A class holding configuration for rom party, e.g. how to choose prompts.")
-
-(cl-defmethod rom-party-select-prompt ((_configuration rom-party-configuration))
-  "Select a rom party prompt for this configuration."
-  (rom-party--select-prompt))
-
-;; Commands
+;;; Commands
 
 (defun rom-party-skip ()
   "Skip the current rom party prompt."
