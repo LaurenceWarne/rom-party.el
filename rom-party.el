@@ -357,7 +357,7 @@ The first table is modified in place."
           (when rom-party-skip-on-end-of-timer (rom-party-skip)))))))
 
 (defun rom-party--process-no-lives ()
-  "Reset the buffer state when the user has no lives."
+  "Set the buffer state when the user has no lives."
   (setq rom-party--game-over t)
   (goto-char (point-max))
   (let* ((text "Game over!")
@@ -365,6 +365,7 @@ The first table is modified in place."
     (rom-party--insert-text-centrally text)
     (let ((ov (make-overlay (- (point) (length text)) (point))))
       (overlay-put ov 'face 'rom-party-game-over))
+    (widget-insert (format " Run: %s" rom-party--run))
     (widget-insert "\n\n")
     (widget-insert (format "%s[r] Start Again\n" (s-repeat offset " ")))
     (widget-insert (format "%s[q] Quit\n" (s-repeat offset " ")))
@@ -379,28 +380,30 @@ The first table is modified in place."
   (let ((buf (get-buffer-create rom-party-buffer-name))
         (inhibit-read-only t))
     (with-current-buffer buf
+
+      ;; Reset buffer vars and widgets if necessary
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (when (timerp rom-party--timer) (cancel-timer rom-party--timer))
       (when rom-party--game-over  ; Assume we've restarted
         (setq rom-party--game-over nil
-              rom-party--lives rom-party-starting-lives)
+              rom-party--lives rom-party-starting-lives
+              rom-party--run 0)
         (rom-party--reset-used-letters)
         (buffer-enable-undo))
       (erase-buffer)
       (remove-overlays)
+      (when (<= rom-party--lives 0) (setq rom-party--lives rom-party-starting-lives))
+
+      ;; Redraw stuff
       (setq rom-party--ewoc (ewoc-create #'rom-party--draw-node nil))
       (let ((title (concat "💾 Party " (s-repeat rom-party--lives "O"))))
         (rom-party--insert-text-centrally title))
-
-      (when (<= rom-party--lives 0) (setq rom-party--lives rom-party-starting-lives))
       (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
         (overlay-put ov 'face 'rom-party-health))
       (widget-insert "\n")
-
       ;; Setup prompt and input
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-prompt nil))
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-input nil))
-
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
 
       ;; Setup timer
