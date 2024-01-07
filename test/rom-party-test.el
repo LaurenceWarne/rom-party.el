@@ -12,13 +12,26 @@
 
 (require 'rom-party)
 
+(defun rom-party--insert-solution (prompt)
+  "Insert a solution for PROMPT."
+  (insert (car (extmap-get rom-party--extmap (intern prompt))))
+  (call-interactively #'widget-field-activate))
+
 (describe "rom-party"
-  (it "Can index and input to prompt"
+  (it "Can index and input to prompt with classic configuration"
     (rom-party)
     (with-current-buffer rom-party-buffer-name
       (let ((prompt rom-party--prompt)
             (used-letters (copy-tree rom-party--used-letters)))
+        (rom-party--insert-solution prompt)
         (expect prompt :not :to-be nil)
-        (insert (car (extmap-get rom-party--extmap (intern prompt))))
-        (call-interactively #'widget-field-activate)
+        (expect rom-party--used-letters :not :to-equal used-letters))))
+
+  (it "Can index and input to prompt with infinite configuration"
+    (rom-party-infinite)
+    (with-current-buffer rom-party-buffer-name
+      (let ((prompt rom-party--prompt)
+            (used-letters (copy-tree rom-party--used-letters)))
+        (expect prompt :not :to-be nil)
+        (rom-party--insert-solution prompt)
         (expect rom-party--used-letters :not :to-equal used-letters)))))
