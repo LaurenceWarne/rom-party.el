@@ -16,9 +16,14 @@
 
 ## Usage
 
-`M-x rom-party` - note `rom-party.el` requires some initial indexing when first run and whenever the custom variable `rom-party-word-sources` is updated.
+`M-x rom-party` - note `rom-party.el` requires some initial indexing when first run and whenever the custom variable `rom-party-word-sources` is updated.  In a rom party buffer the following keybindings are also provided:
 
-There is another command `rom-party-infinite` which is the same as above, but with no timer or lives, to look at all preset configurations see `rom-party-choose-configuration`.
+| Key   | Description                           |
+|-------|---------------------------------------|
+| `C-/` | Hints solutions to the current prompt |
+| `M-s` | Skips the current prompt              |
+
+There is another command `rom-party-infinite` which is the same as above, but with no timer or lives.  To look at all preset configurations see `rom-party-choose-configuration`.
 
 ## Customization
 
