@@ -110,12 +110,6 @@ the same Emacs session."
   :group 'rom-party
   :type 'integer)
 
-(defcustom rom-party-weight-function
-  #'rom-party-log-weight-function
-  "Function called to weight a rom party prompt selection."
-  :group 'rom-party
-  :type 'function)
-
 (defcustom rom-party-skip-on-end-of-timer t
   "If non-nil, issue a new prompt when the timer is up."
   :group 'rom-party
@@ -502,8 +496,8 @@ The first table is modified in place."
   (rom-party--draw-buffer))
 
 ;;;###autoload
-(defun rom-party-infinite-mode ()
-  "Run rom party in infinite mode."
+(defun rom-party-infinite ()
+  "Run rom party with no timer or lives."
   (interactive)
   (let ((rom-party-default-configuration rom-party-infinite-configuration))
     (call-interactively #'rom-party)))
