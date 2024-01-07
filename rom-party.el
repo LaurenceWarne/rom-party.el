@@ -76,16 +76,13 @@ the same Emacs session."
 
 (defcustom rom-party-classic-configuration (rom-party-configuration :show-timer t)
   "The \"classic\" rom party configuration."
+  :group 'rom-party
   :type 'object)
 
 (defcustom rom-party-infinite-configuration (rom-party-configuration :show-timer nil)
   "The \"infinite\" rom party configuration."
-  :type 'object)
-
-(defcustom rom-party-use-timer t
-  "If non-nil, show and run a timer in rom party buffers."
   :group 'rom-party
-  :type 'boolean)
+  :type 'object)
 
 (defcustom rom-party-timer-seconds 5
   "The number of starting seconds for the rom party timer."
@@ -131,7 +128,9 @@ rom party configurations are used to determine whether to use a timer and how
 prompts are selected.
 
 See `rom-party-configurations' for a list of available configurations,
-alternatively you may define your own, see `rom-party-configuration'.")
+alternatively you may define your own, see `rom-party-configuration'."
+  :group 'rom-party
+  :type 'object)
 
 ;;; Constants
 
@@ -170,7 +169,7 @@ alternatively you may define your own, see `rom-party-configuration'.")
 (defvar-local rom-party--timer-node nil)
 (defvar-local rom-party--ewoc nil)
 (defvar-local rom-party--game-over nil)
-(defvar-local rom-party--configuration rom-party-default-configuration)
+(defvar-local rom-party--configuration nil)
 
 ;; Faces
 
@@ -345,7 +344,7 @@ The first table is modified in place."
 
 (defun rom-party--draw-prompt ()
   "Draw the rom party prompt."
-  (let ((prompt (rom-party--select-prompt)))
+  (let ((prompt (rom-party-select-prompt rom-party--configuration)))
     (rom-party--insert-text-centrally prompt)
     (setq rom-party--prompt prompt)
     (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
@@ -427,6 +426,8 @@ The first table is modified in place."
       ;; Reset buffer vars and widgets if necessary
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (when (timerp rom-party--timer) (cancel-timer rom-party--timer))
+      (setq rom-party--configuration (or rom-party--configuration
+                                         rom-party-default-configuration))
       (when rom-party--game-over  ; Assume we've restarted
         (setq rom-party--game-over nil
               rom-party--lives rom-party-starting-lives
@@ -483,6 +484,13 @@ The first table is modified in place."
   (interactive)
   (when (or (null rom-party--extmap) (rom-party--word-files-changed)) (rom-party--get-or-create-index))
   (rom-party--draw-buffer))
+
+;;;###autoload
+(defun rom-party-infinite-mode ()
+  "Run rom party."
+  (interactive)
+  (let ((rom-party-default-configuration rom-party-infinite-configuration))
+    (call-interactively #'rom-party)))
 
 (provide 'rom-party)
 ;;; rom-party.el ends here
