@@ -26,7 +26,15 @@
 ;;; Classes
 
 (defclass rom-party-configuration ()
-  ((show-timer :initarg :show-timer
+  ((name :initarg :name
+         :type string
+         :custom 'string
+         :documentation "The name of this configuration")
+   (description :initarg :description
+                :type string
+                :custom 'string
+                :documentation "A short description of this configuration")
+   (show-timer :initarg :show-timer
                :type boolean
                :custom 'boolean
                :documentation "If non-nil show a timer in rom-party buffers when using this configuration."))
@@ -74,12 +82,20 @@ the same Emacs session."
   :group 'rom-party
   :type 'integer)
 
-(defcustom rom-party-classic-configuration (rom-party-configuration :show-timer t)
+(defcustom rom-party-classic-configuration
+  (rom-party-configuration
+   :name "Classic"
+   :description "Start with two lives, on a five second timer."
+   :show-timer t)
   "The \"classic\" rom party configuration."
   :group 'rom-party
   :type 'object)
 
-(defcustom rom-party-infinite-configuration (rom-party-configuration :show-timer nil)
+(defcustom rom-party-infinite-configuration
+  (rom-party-configuration
+   :name "Infinite"
+   :description "No timer or lives."
+   :show-timer nil)
   "The \"infinite\" rom party configuration."
   :group 'rom-party
   :type 'object)
@@ -487,10 +503,31 @@ The first table is modified in place."
 
 ;;;###autoload
 (defun rom-party-infinite-mode ()
-  "Run rom party."
+  "Run rom party in infinite mode."
   (interactive)
   (let ((rom-party-default-configuration rom-party-infinite-configuration))
     (call-interactively #'rom-party)))
+
+;;;###autoload
+(defun rom-party-choose-configuration ()
+  "Run rom party from a prompted configuration."
+  (interactive)
+  (cl-flet ((configuration-from-name (name)
+              (--first (string= (oref it name) name) rom-party-configurations)))
+    (let* ((mx-width (-max (--map (length (oref it name)) rom-party-configurations)))
+           (completion-extra-properties
+            `(:annotation-function
+              ,(lambda (name)
+                 (let ((desc (oref (configuration-from-name name) description)))
+                   (format "%s    %s"
+                           (make-string (- mx-width (length name)) ?\s)
+                           desc)))))
+           (configuration-choice
+            (completing-read
+             "Configuration: "
+             (-map (lambda (conf) (oref conf name)) rom-party-configurations)))
+           (rom-party-default-configuration (configuration-from-name configuration-choice)))
+      (call-interactively #'rom-party))))
 
 (provide 'rom-party)
 ;;; rom-party.el ends here
