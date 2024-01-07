@@ -53,7 +53,8 @@
 (defcustom rom-party-word-sources
   (list
    ;; See also https://www.reddit.com/r/BombParty/comments/3lehxq/a_nearly_exhaustive_subset_of_the_bombparty/
-   (cons "sowpods.txt" "http://norvig.com/ngrams/sowpods.txt"))
+   (cons "sowpods.txt" "http://norvig.com/ngrams/sowpods.txt")
+   (cons "enable1.txt" "http://norvig.com/ngrams/enable1.txt"))
   "A list of cons cells each of which define a source of words.
 
 The car of each cell is the name of a file to include in the ROM party word
@@ -241,7 +242,8 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
-  (let* ((processed-words-table (ht-create #'equal))
+  (let* ((start-time (float-time))
+         (processed-words-table (ht-create #'equal))
          (merged-table
           (rom-party--merge-hash-tables
            (-map (lambda (source-entry)
@@ -261,7 +263,10 @@ It's purpose is for use with `rom-party-weight-function'."
                  rom-party-word-sources))))
     ;; We need to re-index if the source words change between invocations
     (ht-set merged-table rom-party--used-files-key (rom-party--desired-source-files))
-    (message "Indexed a total of %s words" (ht-size processed-words-table))
+    (let ((finished-time (float-time)))
+      (message "Indexed a total of %s words in %.2f seconds"
+               (ht-size processed-words-table)
+               (- finished-time start-time)))
     merged-table))
 
 (defun rom-party--get-or-create-index ()
