@@ -4,7 +4,7 @@
 ;; Maintainer: Laurence Warne
 ;; Version: 0.1
 ;; Homepage: https://github.com/LaurenceWarne/rom-party.el
-;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0") (ht "2.3") (extmap "1.3") (compat "29.1.4.4"))
+;; Package-Requires: ((emacs "28") (dash "2.17.0") (f "0.2.0") (s "1.12.0") (ht "2.3") (extmap "1.3") (compat "29.1.4.4") (async "1.9.7"))
 
 ;;; Commentary:
 
@@ -12,6 +12,7 @@
 
 ;;; Code:
 
+(require 'async)
 (require 'cl-lib)
 (require 'compat)
 (require 'dash)
@@ -240,6 +241,71 @@ It's purpose is for use with `rom-party-weight-function'."
   (unless rom-party--extmap (setq rom-party--extmap (extmap-init (rom-party--index-path))))
   (not (equal (rom-party--desired-source-files) (rom-party--used-source-files))))
 
+(defun rom-party--index-words-async (callback)
+  "Index words from `rom-party-word-sources', and then call CALLBACK."
+  (let ((load--path load-path))
+    (async-start
+     `(lambda ()
+        ,(async-inject-variables "load-path\\|rom-party-word-sources\\|rom-party-config-directory")
+        ;; (defalias 'rom-party--substring-frequencies
+        ;;   ',(symbol-function 'rom-party--substring-frequencies))
+        (defun rom-party--substring-frequencies (words)
+          "Calculate substring frequences from WORDS as a hash table."
+          (let ((substring-table (ht-create #'equal)))
+            (-each words
+              (lambda (word)
+                (when-let* ((adjusted-word (downcase word))
+                            (length (length adjusted-word))
+                            ((< 1 length))
+                            (last-pair (substring adjusted-word (- length 2) length)))
+                  (ht-set substring-table
+                          last-pair
+                          (cons adjusted-word (ht-get substring-table last-pair)))
+                  (cl-loop for i from 0 below (- length 2)
+                           for sub3 = (substring adjusted-word i (+ i 3))
+                           for sub2 = (substring adjusted-word i (+ i 2))
+                           do (--each (list sub2 sub3)
+                                (when (string-match-p (rx bos (+ alpha) eos) it)
+                                  (ht-set substring-table
+                                          it
+                                          (cons adjusted-word (ht-get substring-table it)))))))))
+            substring-table))
+        (require 'dash)
+        (require 'cl-lib)
+        (require 'extmap)
+        (require 'f)
+        (require 'ht)
+        (require 's)
+        ;; TODO how can I inject functions with async.el?
+        (let* ((start-time (float-time))
+               (processed-words-table (ht-create #'equal))
+               (merged-table (-map (lambda (source-entry)
+                                     (-let* (((file . source) source-entry)
+                                             (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
+                                       (unless (f-exists-p path)
+                                         (message "Downloading %s from %s..." file source)
+                                         (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                                    (buffer-string))
+                                                  'utf-8
+                                                  path))
+                                       (message "Indexing words for %s ..." path)
+                                       (let ((words (--remove (ht-contains-p processed-words-table it)
+                                                              (s-lines (f-read-text path 'utf-8)))))
+                                         (--each words (ht-set processed-words-table it t))
+                                         (rom-party--substring-frequencies words))))
+                                   rom-party-word-sources)))
+          (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
+                             (--map (cons (intern (car it)) (cdr it))
+                                    (ht->alist merged-table))
+                             :overwrite do-overwrite)
+          start-time))
+     (lambda (start-time)
+       (let ((finished-time (float-time)))
+         (message "Indexed a total of %s words in %.2f seconds"
+                  (ht-size processed-words-table)
+                  (- finished-time start-time)))
+       (funcall #'callback)))))
+
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
   (let* ((start-time (float-time))
@@ -269,19 +335,19 @@ It's purpose is for use with `rom-party-weight-function'."
                (- finished-time start-time)))
     merged-table))
 
-(defun rom-party--get-or-create-index ()
-  "Using words from `rom-party-word-sources', create an index of words."
+(defun rom-party--get-or-create-index (callback)
+  "Create an index if necessay and then call CALLBACK."
   (f-mkdir rom-party-config-directory)
   (let* ((index-path (rom-party--index-path))
          (file-exists (f-exists-p index-path))
          (do-overwrite (and file-exists (rom-party--word-files-changed))))
-    (when (or (not file-exists)
+    (cl-flet ((finish ()
+                (setq rom-party--extmap (extmap-init index-path))
+                (funcall callback)))
+      (if (or (not file-exists)
               (and do-overwrite (message "Word files changed, re-indexing...")))
-      (extmap-from-alist index-path
-                         (--map (cons (intern (car it)) (cdr it))
-                                (ht->alist (rom-party--index-words)))
-                         :overwrite do-overwrite))
-    (setq rom-party--extmap (extmap-init index-path))))
+          (rom-party--index-words-async #'finish)
+        (finish)))))
 
 (defun rom-party--merge-hash-tables (tables)
   "Merge TABLES into one hashmap, concatenating keys where applicable.
@@ -359,12 +425,10 @@ The first table is modified in place."
 
 (defun rom-party--draw-prompt ()
   "Draw the rom party prompt."
-  (let ((prompt (rom-party-select-prompt rom-party--configuration)))
-    (rom-party--insert-text-centrally prompt)
-    (setq rom-party--prompt prompt)
-    (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
-      ;; The :height attribute uncenters the text
-      (overlay-put ov 'face 'rom-party-input-prompt))))
+  (rom-party--insert-text-centrally rom-party--prompt)
+  (let ((ov (make-overlay (- (point) (length rom-party--prompt)) (point))))
+    ;; The :height attribute uncenters the text
+    (overlay-put ov 'face 'rom-party-input-prompt)))
 
 (defun rom-party--draw-input ()
   "Draw the rom party input box."
@@ -442,7 +506,8 @@ The first table is modified in place."
       (when (widgetp rom-party--input) (widget-delete rom-party--input))
       (when (timerp rom-party--timer) (cancel-timer rom-party--timer))
       (setq rom-party--configuration (or rom-party--configuration
-                                         rom-party-default-configuration))
+                                         rom-party-default-configuration)
+            rom-party--prompt (rom-party-select-prompt rom-party--configuration))
       (when rom-party--game-over  ; Assume we've restarted
         (setq rom-party--game-over nil
               rom-party--lives rom-party-starting-lives
@@ -497,8 +562,9 @@ The first table is modified in place."
 (defun rom-party ()
   "Run rom party."
   (interactive)
-  (when (or (null rom-party--extmap) (rom-party--word-files-changed)) (rom-party--get-or-create-index))
-  (rom-party--draw-buffer))
+  (if (or (null rom-party--extmap) (rom-party--word-files-changed))
+      (rom-party--get-or-create-index #'rom-party--draw-buffer)
+    (rom-party--draw-buffer)))
 
 ;;;###autoload
 (defun rom-party-infinite ()
