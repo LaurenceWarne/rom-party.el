@@ -19,19 +19,21 @@
 
 (describe "rom-party"
   (it "Can index and input to prompt with classic configuration"
-    (rom-party)
-    (with-current-buffer rom-party-buffer-name
-      (let ((prompt rom-party--prompt)
-            (used-letters (copy-tree rom-party--used-letters)))
-        (rom-party--insert-solution prompt)
-        (expect prompt :not :to-be nil)
-        (expect rom-party--used-letters :not :to-equal used-letters))))
+    (let ((rom-party-index-async nil))
+      (rom-party)
+      (with-current-buffer rom-party-buffer-name
+        (let ((prompt rom-party--prompt)
+              (used-letters (copy-tree rom-party--used-letters)))
+          (rom-party--insert-solution prompt)
+          (expect prompt :not :to-be nil)
+          (expect rom-party--used-letters :not :to-equal used-letters)))))
 
   (it "Can index and input to prompt with infinite configuration"
-    (rom-party-infinite)
-    (with-current-buffer rom-party-buffer-name
-      (let ((prompt rom-party--prompt)
-            (used-letters (copy-tree rom-party--used-letters)))
-        (expect prompt :not :to-be nil)
-        (rom-party--insert-solution prompt)
-        (expect rom-party--used-letters :not :to-equal used-letters)))))
+    (let ((rom-party-index-async nil))
+      (rom-party-infinite)
+      (with-current-buffer rom-party-buffer-name
+        (let ((prompt rom-party--prompt)
+              (used-letters (copy-tree rom-party--used-letters)))
+          (expect prompt :not :to-be nil)
+          (rom-party--insert-solution prompt)
+          (expect rom-party--used-letters :not :to-equal used-letters))))))
