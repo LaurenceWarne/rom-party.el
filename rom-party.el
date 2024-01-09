@@ -144,6 +144,12 @@ alternatively you may define your own, see `rom-party-configuration'."
   :group 'rom-party
   :type 'object)
 
+(defcustom rom-party-index-async
+  t
+  "If non-nil run indexing asynchronously."
+  :group 'rom-party
+  :type 'boolean)
+
 ;;; Constants
 
 (defconst rom-party-version "0.1.0")
@@ -243,68 +249,83 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--index-words-async (callback)
   "Index words from `rom-party-word-sources', and then call CALLBACK."
-  (let ((load--path load-path))
-    (async-start
-     `(lambda ()
-        ,(async-inject-variables "load-path\\|rom-party-word-sources\\|rom-party-config-directory")
-        ;; (defalias 'rom-party--substring-frequencies
-        ;;   ',(symbol-function 'rom-party--substring-frequencies))
-        (defun rom-party--substring-frequencies (words)
-          "Calculate substring frequences from WORDS as a hash table."
-          (let ((substring-table (ht-create #'equal)))
-            (-each words
-              (lambda (word)
-                (when-let* ((adjusted-word (downcase word))
-                            (length (length adjusted-word))
-                            ((< 1 length))
-                            (last-pair (substring adjusted-word (- length 2) length)))
-                  (ht-set substring-table
-                          last-pair
-                          (cons adjusted-word (ht-get substring-table last-pair)))
-                  (cl-loop for i from 0 below (- length 2)
-                           for sub3 = (substring adjusted-word i (+ i 3))
-                           for sub2 = (substring adjusted-word i (+ i 2))
-                           do (--each (list sub2 sub3)
-                                (when (string-match-p (rx bos (+ alpha) eos) it)
-                                  (ht-set substring-table
-                                          it
-                                          (cons adjusted-word (ht-get substring-table it)))))))))
-            substring-table))
-        (require 'dash)
-        (require 'cl-lib)
-        (require 'extmap)
-        (require 'f)
-        (require 'ht)
-        (require 's)
-        ;; TODO how can I inject functions with async.el?
-        (let* ((start-time (float-time))
-               (processed-words-table (ht-create #'equal))
-               (merged-table (-map (lambda (source-entry)
-                                     (-let* (((file . source) source-entry)
-                                             (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
-                                       (unless (f-exists-p path)
-                                         (message "Downloading %s from %s..." file source)
-                                         (f-write (with-current-buffer (url-retrieve-synchronously source)
-                                                    (buffer-string))
-                                                  'utf-8
-                                                  path))
-                                       (message "Indexing words for %s ..." path)
-                                       (let ((words (--remove (ht-contains-p processed-words-table it)
-                                                              (s-lines (f-read-text path 'utf-8)))))
-                                         (--each words (ht-set processed-words-table it t))
-                                         (rom-party--substring-frequencies words))))
-                                   rom-party-word-sources)))
-          (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
-                             (--map (cons (intern (car it)) (cdr it))
-                                    (ht->alist merged-table))
-                             :overwrite do-overwrite)
-          start-time))
-     (lambda (start-time)
-       (let ((finished-time (float-time)))
-         (message "Indexed a total of %s words in %.2f seconds"
-                  (ht-size processed-words-table)
-                  (- finished-time start-time)))
-       (funcall #'callback)))))
+  (message "Starting word indexing, this may take a short while...")
+  (async-start
+   `(lambda ()
+      ,(async-inject-variables "load-path\\|rom-party-word-sources\\|rom-party-config-directory\\|rom-party--used-files-key")
+      ;; (defalias 'rom-party--substring-frequencies
+      ;;   ',(symbol-function 'rom-party--substring-frequencies))
+      (defun rom-party--substring-frequencies (words)
+        "Calculate substring frequences from WORDS as a hash table."
+        (let ((substring-table (ht-create #'equal)))
+          (-each words
+            (lambda (word)
+              (when-let* ((adjusted-word (downcase word))
+                          (length (length adjusted-word))
+                          ((< 1 length))
+                          (last-pair (substring adjusted-word (- length 2) length)))
+                (ht-set substring-table
+                        last-pair
+                        (cons adjusted-word (ht-get substring-table last-pair)))
+                (cl-loop for i from 0 below (- length 2)
+                         for sub3 = (substring adjusted-word i (+ i 3))
+                         for sub2 = (substring adjusted-word i (+ i 2))
+                         do (--each (list sub2 sub3)
+                              (when (string-match-p (rx bos (+ alpha) eos) it)
+                                (ht-set substring-table
+                                        it
+                                        (cons adjusted-word (ht-get substring-table it)))))))))
+          substring-table))
+      (defun rom-party--desired-source-files ()
+        "Get a list of desired source files."
+        (--map (car it) rom-party-word-sources))
+      (defun rom-party--merge-hash-tables (tables)
+        "Merge TABLES into one hashmap, concatenating keys where applicable.
+
+The first table is modified in place."
+        (when-let* ((first (car tables)))
+          (--each (cdr tables)
+            (ht-map
+             (lambda (k v)
+               (ht-set first k (append (ht-get first k v))))
+             it))
+          first))
+      (require 'dash)
+      (require 'cl-lib)
+      (require 'extmap)
+      (require 'f)
+      (require 'ht)
+      (require 's)
+      ;; TODO how can I inject functions with async.el?
+      (let* ((start-time (float-time))
+             (processed-words-table (ht-create #'equal))
+             (merged-table
+              (rom-party--merge-hash-tables
+               (-map (lambda (source-entry)
+                       (-let* (((file . source) source-entry)
+                               (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
+                         (unless (f-exists-p path)
+                           (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                      (buffer-string))
+                                    'utf-8
+                                    path))
+                         (let ((words (--remove (ht-contains-p processed-words-table it)
+                                                (s-lines (f-read-text path 'utf-8)))))
+                           (--each words (ht-set processed-words-table it t))
+                           (rom-party--substring-frequencies words))))
+                     rom-party-word-sources))))
+        ;; We need to re-index if the source words change between invocations
+        (ht-set merged-table rom-party--used-files-key (rom-party--desired-source-files))
+        (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
+                           (--map (cons (intern (car it)) (cdr it))
+                                  (ht->alist merged-table))
+                           :overwrite t)
+        start-time))
+   (lambda (start-time)
+     (let ((finished-time (float-time)))
+       ;; TODO output no words here too
+       (message "Indexing complete in %.2f seconds" (- finished-time start-time)))
+     (funcall callback))))
 
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
@@ -329,6 +350,10 @@ It's purpose is for use with `rom-party-weight-function'."
                  rom-party-word-sources))))
     ;; We need to re-index if the source words change between invocations
     (ht-set merged-table rom-party--used-files-key (rom-party--desired-source-files))
+    (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
+                       (--map (cons (intern (car it)) (cdr it))
+                              (ht->alist merged-table))
+                       :overwrite t)
     (let ((finished-time (float-time)))
       (message "Indexed a total of %s words in %.2f seconds"
                (ht-size processed-words-table)
@@ -346,7 +371,10 @@ It's purpose is for use with `rom-party-weight-function'."
                 (funcall callback)))
       (if (or (not file-exists)
               (and do-overwrite (message "Word files changed, re-indexing...")))
-          (rom-party--index-words-async #'finish)
+          (if rom-party-index-async
+              (rom-party--index-words-async #'finish)
+            (rom-party--index-words)
+            (finish))
         (finish)))))
 
 (defun rom-party--merge-hash-tables (tables)
