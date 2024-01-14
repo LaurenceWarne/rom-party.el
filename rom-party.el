@@ -185,6 +185,7 @@ alternatively you may define your own, see `rom-party-configuration'."
 (defvar-local rom-party--timer nil)
 (defvar-local rom-party--timer-time nil)
 (defvar-local rom-party--timer-node nil)
+(defvar-local rom-party--title-node nil)
 (defvar-local rom-party--ewoc nil)
 (defvar-local rom-party--game-over nil)
 (defvar-local rom-party--configuration nil)
@@ -445,6 +446,14 @@ The first table is modified in place."
   (rom-party--insert-offset (length s))
   (widget-insert s))
 
+(defun rom-party--draw-title ()
+  "Draw the title for a rom party buffer."
+  (let ((title (concat "💾 Party " (s-repeat rom-party--lives "O"))))
+    (rom-party--insert-text-centrally title))
+  (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
+    (overlay-put ov 'face 'rom-party-health))
+  (widget-insert "\n"))
+
 (defun rom-party--draw-timer (time)
   "Draw timer with TIME."
   ;; Aligning with the input box looks nicer than aligning with the window
@@ -484,7 +493,8 @@ The first table is modified in place."
 (defun rom-party--draw-node (data)
   "Draw a rom party node with DATA."
   (-let* (((id . content) data))
-    (cond ((eq id 'rom-party-prompt) (rom-party--draw-prompt))
+    (cond ((eq id 'rom-party-title) (rom-party--draw-title))
+          ((eq id 'rom-party-prompt) (rom-party--draw-prompt))
           ((eq id 'rom-party-input) (rom-party--draw-input))
           ((eq id 'rom-party-letters) (rom-party--draw-letters))
           ((eq id 'rom-party-timer) (rom-party--draw-timer content))
@@ -514,6 +524,7 @@ The first table is modified in place."
     (rom-party--insert-text-centrally text)
     (let ((ov (make-overlay (- (point) (length text)) (point))))
       (overlay-put ov 'face 'rom-party-game-over))
+    (ewoc-invalidate rom-party--ewoc rom-party--title-node)
     (widget-insert (format " Run: %s" rom-party--run))
     (widget-insert "\n\n")
     (widget-insert (format "%s[r] Start Again\n" (s-repeat offset " ")))
@@ -548,12 +559,9 @@ The first table is modified in place."
 
       ;; Redraw stuff
       (setq rom-party--ewoc (ewoc-create #'rom-party--draw-node nil))
-      (let ((title (concat "💾 Party " (s-repeat rom-party--lives "O"))))
-        (rom-party--insert-text-centrally title))
-      (let ((ov (make-overlay (- (point) rom-party--lives) (point))))
-        (overlay-put ov 'face 'rom-party-health))
-      (widget-insert "\n")
       ;; Setup prompt and input
+      ;; TODO consider how HEADER can be used in `ewoc-create' instead
+      (setq rom-party--title-node (ewoc-enter-last rom-party--ewoc (cons 'rom-party-title nil)))
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-prompt nil))
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-input nil))
       (ewoc-enter-last rom-party--ewoc (cons 'rom-party-letters nil))
