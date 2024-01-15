@@ -239,13 +239,13 @@ It's purpose is for use with `rom-party-weight-function'."
   "Get a list of currently used source files."
   (extmap-get rom-party--extmap (intern rom-party--used-files-key)))
 
-(defun rom-party--index-path ()
+(defun rom-party-index-path ()
   "Return the path of the rom party index file."
   (f-join rom-party-config-directory "index.extmap"))
 
 (defun rom-party--word-files-changed ()
   "Return t if word files have changed."
-  (unless rom-party--extmap (setq rom-party--extmap (extmap-init (rom-party--index-path))))
+  (unless rom-party--extmap (setq rom-party--extmap (extmap-init (rom-party-index-path))))
   (not (equal (rom-party--desired-source-files) (rom-party--used-source-files))))
 
 (defun rom-party--index-words-async (callback)
@@ -364,7 +364,7 @@ The first table is modified in place."
 (defun rom-party--get-or-create-index (callback)
   "Create an index if necessay and then call CALLBACK."
   (f-mkdir rom-party-config-directory)
-  (let* ((index-path (rom-party--index-path))
+  (let* ((index-path (rom-party-index-path))
          (file-exists (f-exists-p index-path))
          (do-overwrite (and file-exists (rom-party--word-files-changed))))
     (cl-flet ((finish ()
