@@ -159,6 +159,7 @@ alternatively you may define your own, see `rom-party-configuration'."
 (defconst rom-party--letter-offset (+ 24 25))
 (defconst rom-party--index-format-url
   "https://github.com/LaurenceWarne/rom-party.el/releases/download/%s/index.extmap")
+(defconst rom-party-index-file-name "index.extmap")
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
@@ -252,7 +253,7 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party-index-path ()
   "Return the path of the rom party index file."
-  (f-join rom-party-config-directory "index.extmap"))
+  (f-join rom-party-config-directory rom-party-index-file-name))
 
 (defun rom-party--word-files-changed ()
   "Return t if word files have changed."
@@ -372,6 +373,21 @@ The first table is modified in place."
                (- finished-time start-time)))
     merged-table))
 
+(defun rom-party--download-index-async (callback)
+  "Download the rom party index and call CALLBACK."
+  (async-start
+   `(lambda ()
+      ,(async-inject-variables "rom-party--index-format-url\\|rom-party-version\\|rom-party-config-directory\\|rom-party-index-file-name")
+      (let ((start-time (float-time)))
+        (url-copy-file (format rom-party--index-format-url rom-party-version)
+                       (concat (file-name-as-directory rom-party-config-directory) rom-party-index-file-name)
+                       t)
+        start-time))
+   (lambda (start-time)
+     (let ((finished-time (float-time)))
+       (message "Downloaded index in %.2f seconds" (- finished-time start-time)))
+     (funcall callback))))
+
 (defun rom-party--get-or-create-index (callback)
   "Create an index if necessay and then call CALLBACK."
   (f-mkdir rom-party-config-directory)
@@ -388,10 +404,12 @@ The first table is modified in place."
              (null file-exists)
              (equal (eval (car (get 'rom-party-word-sources 'standard-value))) rom-party-word-sources))
         (message "Downloading index...")
-        (url-copy-file (format rom-party--index-format-url rom-party-version)
-                       index-path
-                       t)
-        (finish))
+        (if rom-party-index-async
+            (rom-party--download-index-async callback)
+          (url-copy-file (format rom-party--index-format-url rom-party-version)
+                         index-path
+                         t)
+          (finish)))
        ;; Check if we need to manually index (async)
        ((and rom-party-index-async create-index)
         (message (if do-overwrite "Word files changed, re-indexing async..."
