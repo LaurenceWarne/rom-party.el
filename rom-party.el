@@ -23,6 +23,7 @@
 (require 's)
 (require 'wid-edit)
 (require 'widget)
+(require 'url)
 
 ;;; Classes
 
@@ -156,9 +157,12 @@ alternatively you may define your own, see `rom-party-configuration'."
 (defconst rom-party-buffer-name "*ROM Party*")
 (defconst rom-party--used-files-key "__used-files")
 (defconst rom-party--letter-offset (+ 24 25))
+(defconst rom-party--index-format-url
+  "https://github.com/LaurenceWarne/rom-party.el/releases/download/%s/index.extmap")
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
+(defvar rom-party--download-index nil)
 
 (defvar-keymap rom-party-keymap
   :parent widget-keymap
@@ -366,17 +370,33 @@ The first table is modified in place."
   (f-mkdir rom-party-config-directory)
   (let* ((index-path (rom-party-index-path))
          (file-exists (f-exists-p index-path))
-         (do-overwrite (and file-exists (rom-party--word-files-changed))))
+         (do-overwrite (and file-exists (rom-party--word-files-changed)))
+         (create-index (or (null file-exists) do-overwrite)))
     (cl-flet ((finish ()
                 (setq rom-party--extmap (extmap-init index-path))
                 (funcall callback)))
-      (if (or (not file-exists)
-              (and do-overwrite (message "Word files changed, re-indexing...")))
-          (if rom-party-index-async
-              (rom-party--index-words-async #'finish)
-            (rom-party--index-words)
-            (finish))
-        (finish)))))
+      (cond
+       ;; TODO do a version check here too
+       ((and rom-party--download-index
+             (null file-exists)
+             (equal (eval (car (get 'rom-party-word-sources 'standard-value))) rom-party-word-sources))
+        (message "Downloading index...")
+        (url-copy-file (format rom-party--index-format-url rom-party-version)
+                       index-path
+                       t))
+       ;; Check if we need to manually index (async)
+       ((and rom-party-index-async create-index)
+        (message (if do-overwrite "Word files changed, re-indexing async..."
+                   "Performing initial indexing async..."))
+        (rom-party--index-words-async #'finish))
+       ;; Check if we need to manually index (sync)
+       (create-index
+        (message (if do-overwrite "Word files changed, re-indexing..."
+                   "Performing initial indexing..."))
+        (rom-party--index-words)
+        (finish))
+       ;; Index is already up to date
+       (t (finish))))))
 
 (defun rom-party--merge-hash-tables (tables)
   "Merge TABLES into one hashmap, concatenating keys where applicable.
@@ -598,7 +618,9 @@ The first table is modified in place."
 (defun rom-party ()
   "Run rom party."
   (interactive)
-  (if (or (null rom-party--extmap) (rom-party--word-files-changed))
+  (if (or (null (f-exists-p (rom-party-index-path)))
+          (null rom-party--extmap)
+          (rom-party--word-files-changed))
       (rom-party--get-or-create-index #'rom-party--draw-buffer)
     (rom-party--draw-buffer)))
 
