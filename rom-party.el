@@ -232,7 +232,10 @@ It's purpose is for use with `rom-party-weight-function'."
   "Select a random prompt."
   (let* ((choice (symbol-name (seq-random-elt (extmap-keys rom-party--extmap))))
          (matching (extmap-get rom-party--extmap (intern choice))))
-    (or (and (funcall rom-party-prompt-filter choice matching) choice)
+    (or (and (not (-is-prefix-p "__" choice))
+             (listp matching)
+             (funcall rom-party-prompt-filter choice matching)
+             choice)
         (rom-party--select-prompt))))
 
 (defun rom-party--desired-source-files ()

@@ -27,7 +27,7 @@ There is another command `rom-party-infinite` which is the same as above, but wi
 
 ## Customization
 
-If you're finding it too difficult (or too easy!), the best way to alter the difficulty is by modifying `rom-party-prompt-filter`.  The function takes a candidate prompt (e.g. `ggi`) and the words matching it - a `nil` values means don't use the prompt.  E.g.
+If you're finding it too difficult (or too easy!), the best way to alter the difficulty is by modifying `rom-party-prompt-filter`.  The function takes a candidate prompt (e.g. `ggi`) and the words matching it - a `nil` value means don't use the prompt.  E.g.
 
 ```elisp
 (setq rom-party-prompt-filter (lambda (prompt words) (>= (length words) 10)))
