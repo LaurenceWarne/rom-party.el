@@ -228,12 +228,16 @@ It's purpose is for use with `rom-party-weight-function'."
 
 ;; Internal functions
 
+(defun rom-party--prompts ()
+  "Return all possible rom party prompts."
+  (let ((key-names (-map #'symbol-name (extmap-keys rom-party--extmap))))
+    (--filter (not (s-prefix-p "__" it)) key-names)))
+
 (defun rom-party--select-prompt ()
   "Select a random prompt."
-  (let* ((choice (symbol-name (seq-random-elt (extmap-keys rom-party--extmap))))
+  (let* ((choice (seq-random-elt (rom-party--prompts)))
          (matching (extmap-get rom-party--extmap (intern choice))))
-    (or (and (not (s-prefix-p "__" choice))
-             (listp matching)
+    (or (and (listp matching)
              (funcall rom-party-prompt-filter choice matching)
              choice)
         (rom-party--select-prompt))))
@@ -386,7 +390,8 @@ The first table is modified in place."
         (message "Downloading index...")
         (url-copy-file (format rom-party--index-format-url rom-party-version)
                        index-path
-                       t))
+                       t)
+        (finish))
        ;; Check if we need to manually index (async)
        ((and rom-party-index-async create-index)
         (message (if do-overwrite "Word files changed, re-indexing async..."

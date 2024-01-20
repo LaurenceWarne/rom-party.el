@@ -18,10 +18,11 @@
   (call-interactively #'widget-field-activate))
 
 (defmacro rom-party--test-setup (&rest body)
+  "Perform common test setup, and then run BODY."
   `(let ((rom-party-index-async nil)
          (rom-party-config-directory "/tmp/rom-party")
          (rom-party--download-index nil))
-     (print "deleting rom party directory")
+     (when (get-buffer rom-party-buffer-name) (kill-buffer rom-party-buffer-name))
      (f-delete rom-party-config-directory t)
      ,@body))
 
@@ -36,6 +37,12 @@
          (expect prompt :not :to-be nil)
          (expect rom-party--used-letters :not :to-equal used-letters)))))
 
+  (it "All index elements are lists"
+    (rom-party--test-setup
+     (rom-party)
+     (expect (--map (listp (extmap-get rom-party--extmap (intern it))) (rom-party--prompts))
+             :not :to-contain nil)))
+
   (it "Can index and input to prompt with infinite configuration"
     (rom-party--test-setup
      (rom-party-infinite)
@@ -49,7 +56,7 @@
   (it "Can download index"
     (rom-party--test-setup
      (let ((rom-party--download-index t))
-       (rom-party-infinite)
+       (rom-party)
        (with-current-buffer rom-party-buffer-name
          (let ((prompt rom-party--prompt)
                (used-letters (copy-tree rom-party--used-letters)))
