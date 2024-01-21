@@ -405,7 +405,7 @@ The first table is modified in place."
              (equal (eval (car (get 'rom-party-word-sources 'standard-value))) rom-party-word-sources))
         (message "Downloading index...")
         (if rom-party-index-async
-            (rom-party--download-index-async callback)
+            (rom-party--download-index-async #'finish)
           (url-copy-file (format rom-party--index-format-url rom-party-version)
                          index-path
                          t)

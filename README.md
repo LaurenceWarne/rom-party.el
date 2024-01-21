@@ -2,7 +2,9 @@
 
 # rom-party.el
 
-[:bomb: Party](https://jklm.fun/)... in Emacs.
+[:bomb: Party](https://jklm.fun/)... in Emacs:
+
+![rom-party](https://github.com/LaurenceWarne/rom-party.el/assets/17688577/93aab505-456f-4b3f-84e4-fc4c1211f03a)
 
 ## Installation
 
