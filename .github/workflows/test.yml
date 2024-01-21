@@ -17,6 +17,7 @@ jobs:
         emacs_version:
           - 28.2
           - 29.1
+          - 29.2
 
     steps:
     - name: Set up Emacs
