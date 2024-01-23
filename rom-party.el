@@ -232,7 +232,8 @@ It's purpose is for use with `rom-party-weight-function'."
 (defun rom-party--prompts ()
   "Return all possible rom party prompts."
   (let ((key-names (-map #'symbol-name (extmap-keys rom-party--extmap))))
-    (--filter (not (s-prefix-p "__" it)) key-names)))
+    (--filter (and (not (s-prefix-p "__" it))
+                   (not (s-contains-p "_idx" it))) key-names)))
 
 (defun rom-party--select-prompt ()
   "Select a random prompt."
@@ -268,41 +269,30 @@ It's purpose is for use with `rom-party-weight-function'."
       ,(async-inject-variables "load-path\\|rom-party-word-sources\\|rom-party-config-directory\\|rom-party--used-files-key")
       ;; (defalias 'rom-party--substring-frequencies
       ;;   ',(symbol-function 'rom-party--substring-frequencies))
-      (defun rom-party--substring-frequencies (words)
-        "Calculate substring frequences from WORDS as a hash table."
+      (defun rom-party--substring-frequencies (words word-hashtable)
+        "Calculate substring frequences from WORDS as a hash table, using WORD-HASHTABLE."
         (let ((substring-table (ht-create #'equal)))
           (-each words
             (lambda (word)
-              (when-let* ((adjusted-word (downcase word))
-                          (length (length adjusted-word))
+              (when-let* ((idx (ht-get word-hashtable (rom-party--word-lookup-key word)))
+                          (length (length word))
                           ((< 1 length))
-                          (last-pair (substring adjusted-word (- length 2) length)))
+                          (last-pair (substring word (- length 2) length)))
                 (ht-set substring-table
                         last-pair
-                        (cons adjusted-word (ht-get substring-table last-pair)))
+                        (cons idx (ht-get substring-table last-pair)))
                 (cl-loop for i from 0 below (- length 2)
-                         for sub3 = (substring adjusted-word i (+ i 3))
-                         for sub2 = (substring adjusted-word i (+ i 2))
+                         for sub3 = (substring word i (+ i 3))
+                         for sub2 = (substring word i (+ i 2))
                          do (--each (list sub2 sub3)
                               (when (string-match-p (rx bos (+ alpha) eos) it)
                                 (ht-set substring-table
                                         it
-                                        (cons adjusted-word (ht-get substring-table it)))))))))
+                                        (cons idx (ht-get substring-table it)))))))))
           substring-table))
       (defun rom-party--desired-source-files ()
         "Get a list of desired source files."
         (--map (car it) rom-party-word-sources))
-      (defun rom-party--merge-hash-tables (tables)
-        "Merge TABLES into one hashmap, concatenating keys where applicable.
-
-The first table is modified in place."
-        (when-let* ((first (car tables)))
-          (--each (cdr tables)
-            (ht-map
-             (lambda (k v)
-               (ht-set first k (append (ht-get first k v))))
-             it))
-          first))
       (require 'dash)
       (require 'cl-lib)
       (require 'extmap)
@@ -311,27 +301,31 @@ The first table is modified in place."
       (require 's)
       ;; TODO how can I inject functions with async.el?
       (let* ((start-time (float-time))
-             (processed-words-table (ht-create #'equal))
-             (merged-table
-              (rom-party--merge-hash-tables
-               (-map (lambda (source-entry)
-                       (-let* (((file . source) source-entry)
-                               (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
-                         (unless (f-exists-p path)
-                           (f-write (with-current-buffer (url-retrieve-synchronously source)
-                                      (buffer-string))
-                                    'utf-8
-                                    path))
-                         (let ((words (--remove (ht-contains-p processed-words-table it)
-                                                (s-lines (f-read-text path 'utf-8)))))
-                           (--each words (ht-set processed-words-table it t))
-                           (rom-party--substring-frequencies words))))
-                     rom-party-word-sources))))
+             (all-words
+              ;; We load all words from all sources into memory ahead of time, and then dedupe.
+              ;; We could dedupe incrementally instead.
+              (-sort (-distinct (-map (lambda (source-entry)
+                                        (-let* (((file . source) source-entry)
+                                                (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
+                                          (unless (f-exists-p path)
+                                            (message "Downloading %s from %s..." file source)
+                                            (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                                       (buffer-string))
+                                                     'utf-8
+                                                     path))
+                                          (-map #'downcase (s-lines (f-read-text path 'utf-8)))))
+                                      rom-party-word-sources))
+                     #'string<))
+             (word-hashtable (ht<-alist (--map-indexed (cons (rom-party--word-lookup-key it)
+                                                             it-index)
+                                                       all-words)))
+             (frequencies-table (rom-party--substring-frequencies all-words word-hashtable)))
         ;; We need to re-index if the source words change between invocations
-        (ht-set merged-table rom-party--used-files-key (rom-party--desired-source-files))
+        (ht-set frequencies-table rom-party--used-files-key (rom-party--desired-source-files))
         (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
-                           (--map (cons (intern (car it)) (cdr it))
-                                  (ht->alist merged-table))
+                           (append (--map (cons (intern (car it)) (cdr it))
+                                          (ht->alist frequencies-table))
+                                   (ht->alist word-hashtable))
                            :overwrite t)
         start-time))
    (lambda (start-time)
@@ -344,34 +338,37 @@ The first table is modified in place."
   "Using words from `rom-party-word-sources', create an index of words."
   (let* ((start-time (float-time))
          (processed-words-table (ht-create #'equal))
-         (merged-table
-          (rom-party--merge-hash-tables
-           (-map (lambda (source-entry)
-                   (-let* (((file . source) source-entry)
-                           (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
-                     (unless (f-exists-p path)
-                       (message "Downloading %s from %s..." file source)
-                       (f-write (with-current-buffer (url-retrieve-synchronously source)
-                                  (buffer-string))
-                                'utf-8
-                                path))
-                     (message "Indexing words for %s ..." path)
-                     (let ((words (--remove (ht-contains-p processed-words-table it)
-                                            (s-lines (f-read-text path 'utf-8)))))
-                       (--each words (ht-set processed-words-table it t))
-                       (rom-party--substring-frequencies words))))
-                 rom-party-word-sources))))
+         (all-words
+          ;; We load all words from all sources into memory ahead of time, and then dedupe.
+          ;; We could dedupe incrementally instead.
+          (-sort #'string<
+                 (-distinct (-mapcat (lambda (source-entry)
+                                       (-let* (((file . source) source-entry)
+                                               (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
+                                         (unless (f-exists-p path)
+                                           (message "Downloading %s from %s..." file source)
+                                           (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                                      (buffer-string))
+                                                    'utf-8
+                                                    path))
+                                         (-map #'downcase (s-lines (f-read-text path 'utf-8)))))
+                                     rom-party-word-sources))))
+         (word-hashtable (ht<-alist (--map-indexed (cons (rom-party--word-lookup-key it)
+                                                         it-index)
+                                                   all-words)))
+         (frequencies-table (rom-party--substring-frequencies all-words word-hashtable)))
     ;; We need to re-index if the source words change between invocations
-    (ht-set merged-table rom-party--used-files-key (rom-party--desired-source-files))
+    (ht-set frequencies-table rom-party--used-files-key (rom-party--desired-source-files))
     (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
-                       (--map (cons (intern (car it)) (cdr it))
-                              (ht->alist merged-table))
+                       (append (--map (cons (intern (car it)) (cdr it))
+                                      (ht->alist frequencies-table))
+                               (ht->alist word-hashtable))
                        :overwrite t)
     (let ((finished-time (float-time)))
       (message "Indexed a total of %s words in %.2f seconds"
                (ht-size processed-words-table)
                (- finished-time start-time)))
-    merged-table))
+    frequencies-table))
 
 (defun rom-party--download-index-async (callback)
   "Download the rom party index and call CALLBACK."
@@ -436,43 +433,48 @@ The first table is modified in place."
        it))
     first))
 
-(defun rom-party--substring-frequencies (words)
-  "Calculate substring frequences from WORDS as a hash table."
+(defun rom-party--substring-frequencies (words word-hashtable)
+  "Calculate substring frequences from WORDS as a hash table, using WORD-HASHTABLE."
   (let ((substring-table (ht-create #'equal)))
     (-each words
       (lambda (word)
-        (when-let* ((adjusted-word (downcase word))
-                    (length (length adjusted-word))
+        (when-let* ((idx (ht-get word-hashtable (rom-party--word-lookup-key word)))
+                    (length (length word))
                     ((< 1 length))
-                    (last-pair (substring adjusted-word (- length 2) length)))
+                    (last-pair (substring word (- length 2) length)))
           (ht-set substring-table
                   last-pair
-                  (cons adjusted-word (ht-get substring-table last-pair)))
+                  (cons idx (ht-get substring-table last-pair)))
           (cl-loop for i from 0 below (- length 2)
-                   for sub3 = (substring adjusted-word i (+ i 3))
-                   for sub2 = (substring adjusted-word i (+ i 2))
+                   for sub3 = (substring word i (+ i 3))
+                   for sub2 = (substring word i (+ i 2))
                    do (--each (list sub2 sub3)
                         (when (string-match-p (rx bos (+ alpha) eos) it)
                           (ht-set substring-table
                                   it
-                                  (cons adjusted-word (ht-get substring-table it)))))))))
+                                  (cons idx (ht-get substring-table it)))))))))
     substring-table))
+
+(defun rom-party--word-lookup-key (word)
+  "Return the lookup key for WORD used in `rom-party--extmap'."
+  (intern (format "%s_idx" word)))
 
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (unless rom-party--game-over
-    (let ((user-attempt (downcase (widget-value rom-party--input))))
-      (if (and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) user-attempt)
-               (s-contains-p rom-party--prompt user-attempt))
-          (progn (message "Correct!")
-                 (cl-incf rom-party--run)
-                 (--each (string-to-list user-attempt)
-                   (setcdr (assoc it rom-party--used-letters) t))
-                 (when (--all-p (cdr it) rom-party--used-letters)
-                   (rom-party--reset-used-letters)
-                   (cl-incf rom-party--lives))
-                 (rom-party--draw-buffer))
-        (message "Incorrect!")))))
+    (if-let* ((user-attempt (downcase (widget-value rom-party--input)))
+              (idx (extmap-get rom-party--extmap (rom-party--word-lookup-key user-attempt)))
+              ((and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) idx)
+                    (s-contains-p rom-party--prompt user-attempt))))
+        (progn (message "Correct!")
+               (cl-incf rom-party--run)
+               (--each (string-to-list user-attempt)
+                 (setcdr (assoc it rom-party--used-letters) t))
+               (when (--all-p (cdr it) rom-party--used-letters)
+                 (rom-party--reset-used-letters)
+                 (cl-incf rom-party--lives))
+               (rom-party--draw-buffer))
+      (message "Incorrect!"))))
 
 (defun rom-party--reset-used-letters ()
   "Reset `rom-party--used-letters'."
