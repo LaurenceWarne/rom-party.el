@@ -14,7 +14,9 @@
 
 (defun rom-party--insert-solution (prompt)
   "Insert a solution for PROMPT."
-  (insert (car (extmap-get rom-party--extmap (intern prompt))))
+  (insert (car (aref
+                (extmap-get rom-party--extmap rom-party--all-words-key)
+                (extmap-get rom-party--extmap (intern prompt)))))
   (call-interactively #'widget-field-activate))
 
 (defmacro rom-party--test-setup (&rest body)

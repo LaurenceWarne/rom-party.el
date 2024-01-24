@@ -155,11 +155,12 @@ alternatively you may define your own, see `rom-party-configuration'."
 
 (defconst rom-party-version "0.1.0")
 (defconst rom-party-buffer-name "*ROM Party*")
-(defconst rom-party--used-files-key "__used-files")
+(defconst rom-party--used-files-key (intern "__used-files"))
+(defconst rom-party--all-words-key (intern "__all-words"))
 (defconst rom-party--letter-offset (+ 24 25))
 (defconst rom-party--index-format-url
   "https://github.com/LaurenceWarne/rom-party.el/releases/download/%s/index.extmap")
-(defconst rom-party-index-file-name "index.extmap")
+(defconst rom-party-index-extmap-file-name "index.extmap")
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
@@ -232,8 +233,7 @@ It's purpose is for use with `rom-party-weight-function'."
 (defun rom-party--prompts ()
   "Return all possible rom party prompts."
   (let ((key-names (-map #'symbol-name (extmap-keys rom-party--extmap))))
-    (--filter (and (not (s-prefix-p "__" it))
-                   (not (s-contains-p "_idx" it))) key-names)))
+    (--filter (not (s-prefix-p "__" it)) key-names)))
 
 (defun rom-party--select-prompt ()
   "Select a random prompt."
@@ -250,11 +250,11 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--used-source-files ()
   "Get a list of currently used source files."
-  (extmap-get rom-party--extmap (intern rom-party--used-files-key)))
+  (extmap-get rom-party--extmap rom-party--used-files-key))
 
 (defun rom-party-index-path ()
   "Return the path of the rom party index file."
-  (f-join rom-party-config-directory rom-party-index-file-name))
+  (f-join rom-party-config-directory rom-party-index-extmap-file-name))
 
 (defun rom-party--word-files-changed ()
   "Return t if word files have changed."
@@ -274,7 +274,7 @@ It's purpose is for use with `rom-party-weight-function'."
         (let ((substring-table (ht-create #'equal)))
           (-each words
             (lambda (word)
-              (when-let* ((idx (ht-get word-hashtable (rom-party--word-lookup-key word)))
+              (when-let* ((idx (ht-get word-hashtable word))
                           (length (length word))
                           ((< 1 length))
                           (last-pair (substring word (- length 2) length)))
@@ -304,29 +304,31 @@ It's purpose is for use with `rom-party-weight-function'."
              (all-words
               ;; We load all words from all sources into memory ahead of time, and then dedupe.
               ;; We could dedupe incrementally instead.
-              (-sort (-distinct (-map (lambda (source-entry)
-                                        (-let* (((file . source) source-entry)
-                                                (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
-                                          (unless (f-exists-p path)
-                                            (message "Downloading %s from %s..." file source)
-                                            (f-write (with-current-buffer (url-retrieve-synchronously source)
-                                                       (buffer-string))
-                                                     'utf-8
-                                                     path))
-                                          (-map #'downcase (s-lines (f-read-text path 'utf-8)))))
-                                      rom-party-word-sources))
-                     #'string<))
-             (word-hashtable (ht<-alist (--map-indexed (cons (rom-party--word-lookup-key it)
-                                                             it-index)
-                                                       all-words)))
+              (-sort #'string<
+                     (-distinct (-mapcat (lambda (source-entry)
+                                           (-let* (((file . source) source-entry)
+                                                   (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
+                                             (unless (f-exists-p path)
+                                               (message "Downloading %s from %s..." file source)
+                                               (f-write (with-current-buffer (url-retrieve-synchronously source)
+                                                          (buffer-string))
+                                                        'utf-8
+                                                        path))
+                                             (-map #'downcase (s-lines (f-read-text path 'utf-8)))))
+                                         rom-party-word-sources))))
+             (word-hashtable (ht<-alist (--map-indexed (cons it  it-index) all-words)))
              (frequencies-table (rom-party--substring-frequencies all-words word-hashtable)))
         ;; We need to re-index if the source words change between invocations
         (ht-set frequencies-table rom-party--used-files-key (rom-party--desired-source-files))
         (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
                            (append (--map (cons (intern (car it)) (cdr it))
                                           (ht->alist frequencies-table))
-                                   (ht->alist word-hashtable))
+                                   (list (cons rom-party--all-words-key (vconcat all-words))))
                            :overwrite t)
+        (let ((finished-time (float-time)))
+          (message "Indexed a total of %s words in %.2f seconds"
+                   (length all-words)
+                   (- finished-time start-time)))
         start-time))
    (lambda (start-time)
      (let ((finished-time (float-time)))
@@ -337,7 +339,6 @@ It's purpose is for use with `rom-party-weight-function'."
 (defun rom-party--index-words ()
   "Using words from `rom-party-word-sources', create an index of words."
   (let* ((start-time (float-time))
-         (processed-words-table (ht-create #'equal))
          (all-words
           ;; We load all words from all sources into memory ahead of time, and then dedupe.
           ;; We could dedupe incrementally instead.
@@ -353,20 +354,18 @@ It's purpose is for use with `rom-party-weight-function'."
                                                     path))
                                          (-map #'downcase (s-lines (f-read-text path 'utf-8)))))
                                      rom-party-word-sources))))
-         (word-hashtable (ht<-alist (--map-indexed (cons (rom-party--word-lookup-key it)
-                                                         it-index)
-                                                   all-words)))
+         (word-hashtable (ht<-alist (--map-indexed (cons it  it-index) all-words)))
          (frequencies-table (rom-party--substring-frequencies all-words word-hashtable)))
     ;; We need to re-index if the source words change between invocations
     (ht-set frequencies-table rom-party--used-files-key (rom-party--desired-source-files))
     (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
                        (append (--map (cons (intern (car it)) (cdr it))
                                       (ht->alist frequencies-table))
-                               (ht->alist word-hashtable))
+                               (list (cons rom-party--all-words-key (vconcat all-words))))
                        :overwrite t)
     (let ((finished-time (float-time)))
       (message "Indexed a total of %s words in %.2f seconds"
-               (ht-size processed-words-table)
+               (length all-words)
                (- finished-time start-time)))
     frequencies-table))
 
@@ -374,10 +373,10 @@ It's purpose is for use with `rom-party-weight-function'."
   "Download the rom party index and call CALLBACK."
   (async-start
    `(lambda ()
-      ,(async-inject-variables "rom-party--index-format-url\\|rom-party-version\\|rom-party-config-directory\\|rom-party-index-file-name")
+      ,(async-inject-variables "rom-party--index-format-url\\|rom-party-version\\|rom-party-config-directory\\|rom-party-index-extmap-file-name")
       (let ((start-time (float-time)))
         (url-copy-file (format rom-party--index-format-url rom-party-version)
-                       (concat (file-name-as-directory rom-party-config-directory) rom-party-index-file-name)
+                       (concat (file-name-as-directory rom-party-config-directory) rom-party-index-extmap-file-name)
                        t)
         start-time))
    (lambda (start-time)
@@ -438,7 +437,7 @@ The first table is modified in place."
   (let ((substring-table (ht-create #'equal)))
     (-each words
       (lambda (word)
-        (when-let* ((idx (ht-get word-hashtable (rom-party--word-lookup-key word)))
+        (when-let* ((idx (ht-get word-hashtable word))
                     (length (length word))
                     ((< 1 length))
                     (last-pair (substring word (- length 2) length)))
@@ -455,15 +454,12 @@ The first table is modified in place."
                                   (cons idx (ht-get substring-table it)))))))))
     substring-table))
 
-(defun rom-party--word-lookup-key (word)
-  "Return the lookup key for WORD used in `rom-party--extmap'."
-  (intern (format "%s_idx" word)))
-
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (unless rom-party--game-over
     (if-let* ((user-attempt (downcase (widget-value rom-party--input)))
-              (idx (extmap-get rom-party--extmap (rom-party--word-lookup-key user-attempt)))
+              (all-words (extmap-get rom-party--extmap rom-party--all-words-key))
+              (idx (rom-party--binary-search user-attempt all-words #'string<))
               ((and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) idx)
                     (s-contains-p rom-party--prompt user-attempt))))
         (progn (message "Correct!")
@@ -629,6 +625,21 @@ The first table is modified in place."
       (widget-move -1 t))
     (display-buffer buf '(display-buffer-same-window))))
 
+;; https://rosettacode.org/wiki/Binary_search#Emacs_Lisp
+(defun rom-party--binary-search (value vector cmp)
+  "Return the index of VALUE in VECTOR using comparator CMP.
+
+If VALUE is not present in VECTOR, return nil."
+  (let ((low 0)
+        (high (1- (length vector))))
+    (cl-do () ((< high low) nil)
+      (let ((middle (floor (+ low high) 2)))
+        (cond ((funcall cmp value (aref vector middle))
+               (setq high (1- middle)))
+              ((funcall cmp (aref vector middle) value)
+               (setq low (1+ middle)))
+              (t (cl-return middle)))))))
+
 ;;; Commands
 
 (defun rom-party-skip ()
@@ -639,7 +650,8 @@ The first table is modified in place."
 (defun rom-party-hint ()
   "Hint solutions for the current prompt in the echo area."
   (interactive)
-  (let* ((valid (extmap-get rom-party--extmap (intern rom-party--prompt))))
+  (let* ((valid-idxs (extmap-get rom-party--extmap (intern rom-party--prompt)))
+         (valid (--map (aref (extmap-get rom-party--extmap rom-party--all-words-key) it) valid-idxs)))
     (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
 
 ;;;###autoload
