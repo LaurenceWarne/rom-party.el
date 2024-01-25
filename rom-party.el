@@ -357,7 +357,7 @@ It's purpose is for use with `rom-party-weight-function'."
          (word-hashtable (ht<-alist (--map-indexed (cons it  it-index) all-words)))
          (frequencies-table (rom-party--substring-frequencies all-words word-hashtable)))
     ;; We need to re-index if the source words change between invocations
-    (ht-set frequencies-table rom-party--used-files-key (rom-party--desired-source-files))
+    (ht-set frequencies-table (symbol-name rom-party--used-files-key) (rom-party--desired-source-files))
     (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
                        (append (--map (cons (intern (car it)) (cdr it))
                                       (ht->alist frequencies-table))
