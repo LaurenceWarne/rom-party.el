@@ -4,7 +4,7 @@
 
 [:bomb: Party](https://jklm.fun/)... in Emacs:
 
-![rom-party](https://github.com/LaurenceWarne/rom-party.el/assets/17688577/93aab505-456f-4b3f-84e4-fc4c1211f03a)
+https://github.com/LaurenceWarne/rom-party.el/assets/17688577/396f71fb-6f6c-4c88-8dd6-f0526c02463c
 
 ## Installation
 
@@ -32,7 +32,7 @@ There is another command `rom-party-infinite` which is the same as above, but wi
 If you're finding it too difficult (or too easy!), the best way to alter the difficulty is by modifying `rom-party-prompt-filter`.  The function takes a candidate prompt (e.g. `ggi`) and the words matching it - a `nil` value means don't use the prompt.  E.g.
 
 ```elisp
-(setq rom-party-prompt-filter (lambda (prompt words) (>= (length words) 10)))
+(setq rom-party-prompt-filter (lambda (prompt words) (>= (length words) 50)))
 ```
 
 Means any prompts with less than 10 matching solutions are not shown.
