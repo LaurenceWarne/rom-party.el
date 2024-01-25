@@ -457,7 +457,7 @@ The first table is modified in place."
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (unless rom-party--game-over
-    (if-let* ((user-attempt (downcase (widget-value rom-party--input)))
+    (if-let* ((user-attempt (s-trim (downcase (widget-value rom-party--input))))
               (all-words (extmap-get rom-party--extmap rom-party--all-words-key))
               (idx (rom-party--binary-search user-attempt all-words #'string<))
               ((and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) idx)
