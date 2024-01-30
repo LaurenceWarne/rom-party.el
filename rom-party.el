@@ -1,4 +1,4 @@
-;;; rom-party.el --- Bomb Party -*- lexical-binding: t -*-
+;;; rom-party.el --- Rendition of jklm.fun's "Bomb Party" game -*- lexical-binding: t -*-
 
 ;; Author: Laurence Warne
 ;; Maintainer: Laurence Warne
