@@ -341,22 +341,29 @@ It's purpose is for use with `rom-party-weight-function'."
      `(lambda ()
         ,(async-inject-variables "load-path")
         (require 'rom-party)
-        (let* ((out-file-name (concat (file-name-as-directory rom-party-config-directory)
-                                      rom-party-index-extmap-file-name))
-               (compressed-out-file-name (concat out-file-name ".gz")))
-          (if (executable-find "gunzip")
-              (progn (url-copy-file (format rom-party--compressed-index-format-url rom-party-version)
-                                    compressed-out-file-name
-                                    t)
-                     (shell-command (format "gunzip %s" out-file-name)))
-            (message "gunzip not found on path, downloading uncompressed file...")
-            (url-copy-file (format rom-party--index-format-url rom-party-version)
-                           out-file-name
-                           t))))
+        (rom-party--download-index))
      (lambda (&rest _)
        (let ((finished-time (float-time)))
          (message "Downloaded index in %.2f seconds" (- finished-time start-time)))
        (funcall callback)))))
+
+(defun rom-party--download-index ()
+  "Download the rom party index."
+  (let ((start-time (float-time)))
+    (let* ((out-file-name (concat (file-name-as-directory rom-party-config-directory)
+                                  rom-party-index-extmap-file-name))
+           (compressed-out-file-name (concat out-file-name ".gz")))
+      (if (executable-find "gunzip")
+          (progn (url-copy-file (format rom-party--compressed-index-format-url rom-party-version)
+                                compressed-out-file-name
+                                t)
+                 (message "Extracting %s" compressed-out-file-name)
+                 (shell-command (format "gunzip %s" out-file-name)))
+        (message "gunzip not found on path, downloading uncompressed file...")
+        (url-copy-file (format rom-party--index-format-url rom-party-version)
+                       out-file-name
+                       t))
+      (message "Downloaded index in %.2f seconds" (- (float-time) start-time)))))
 
 (defun rom-party--get-or-create-index (callback)
   "Create an index if necessay and then call CALLBACK."
@@ -376,9 +383,7 @@ It's purpose is for use with `rom-party-weight-function'."
         (message "Downloading index...")
         (if rom-party-index-async
             (rom-party--download-index-async #'finish)
-          (url-copy-file (format rom-party--index-format-url rom-party-version)
-                         index-path
-                         t)
+          (rom-party--download-index)
           (finish)))
        ;; Check if we need to manually index (async)
        ((and rom-party-index-async create-index)
