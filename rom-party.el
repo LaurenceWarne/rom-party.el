@@ -183,6 +183,8 @@ alternatively you may define your own, see `rom-party-configuration'."
 (defconst rom-party--letter-offset (+ 24 25))
 (defconst rom-party--index-format-url
   "https://github.com/LaurenceWarne/rom-party.el/releases/download/%s/index.extmap")
+(defconst rom-party--compressed-index-format-url
+  "https://github.com/LaurenceWarne/rom-party.el/releases/download/%s/index.extmap.gz")
 (defconst rom-party-index-extmap-file-name "index.extmap")
 
 (defvar rom-party--extmap nil)
@@ -289,70 +291,10 @@ It's purpose is for use with `rom-party-weight-function'."
   (message "Starting word indexing, this may take a short while...")
   (async-start
    `(lambda ()
-      ,(async-inject-variables "load-path\\|rom-party-word-sources\\|rom-party-config-directory\\|rom-party--used-files-key")
-      ;; (defalias 'rom-party--substring-frequencies
-      ;;   ',(symbol-function 'rom-party--substring-frequencies))
-      (defun rom-party--substring-frequencies (words word-hashtable)
-        "Calculate substring frequences from WORDS as a hash table, using WORD-HASHTABLE."
-        (let ((substring-table (ht-create #'equal)))
-          (-each words
-            (lambda (word)
-              (when-let* ((idx (ht-get word-hashtable word))
-                          (length (length word))
-                          ((< 1 length))
-                          (last-pair (substring word (- length 2) length)))
-                (ht-set substring-table
-                        last-pair
-                        (cons idx (ht-get substring-table last-pair)))
-                (cl-loop for i from 0 below (- length 2)
-                         for sub3 = (substring word i (+ i 3))
-                         for sub2 = (substring word i (+ i 2))
-                         do (--each (list sub2 sub3)
-                              (when (string-match-p (rx bos (+ alpha) eos) it)
-                                (ht-set substring-table
-                                        it
-                                        (cons idx (ht-get substring-table it)))))))))
-          substring-table))
-      (defun rom-party--desired-source-files ()
-        "Get a list of desired source files."
-        (--map (car it) rom-party-word-sources))
-      (require 'dash)
-      (require 'cl-lib)
-      (require 'extmap)
-      (require 'f)
-      (require 'ht)
-      (require 's)
-      ;; TODO how can I inject functions with async.el?
-      (let* ((start-time (float-time))
-             (all-words
-              ;; We load all words from all sources into memory ahead of time, and then dedupe.
-              ;; We could dedupe incrementally instead.
-              (-sort #'string<
-                     (-distinct (-mapcat (lambda (source-entry)
-                                           (-let* (((file . source) source-entry)
-                                                   (path (if (f-exists-p file) file (f-join rom-party-config-directory file))))
-                                             (unless (f-exists-p path)
-                                               (message "Downloading %s from %s..." file source)
-                                               (f-write (with-current-buffer (url-retrieve-synchronously source)
-                                                          (buffer-string))
-                                                        'utf-8
-                                                        path))
-                                             (-map #'downcase (s-lines (f-read-text path 'utf-8)))))
-                                         rom-party-word-sources))))
-             (word-hashtable (ht<-alist (--map-indexed (cons it  it-index) all-words)))
-             (frequencies-table (rom-party--substring-frequencies all-words word-hashtable)))
-        ;; We need to re-index if the source words change between invocations
-        (ht-set frequencies-table rom-party--used-files-key (rom-party--desired-source-files))
-        (extmap-from-alist (f-join rom-party-config-directory "index.extmap")
-                           (append (--map (cons (intern (car it)) (cdr it))
-                                          (ht->alist frequencies-table))
-                                   (list (cons rom-party--all-words-key (vconcat all-words))))
-                           :overwrite t)
-        (let ((finished-time (float-time)))
-          (message "Indexed a total of %s words in %.2f seconds"
-                   (length all-words)
-                   (- finished-time start-time)))
-        start-time))
+      ,(async-inject-variables "load-path")
+      (prog1 (float-time)
+        (require 'rom-party)
+        (rom-party-index-words)))
    (lambda (start-time)
      (let ((finished-time (float-time)))
        ;; TODO output no words here too
@@ -394,18 +336,27 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--download-index-async (callback)
   "Download the rom party index and call CALLBACK."
-  (async-start
-   `(lambda ()
-      ,(async-inject-variables "rom-party--index-format-url\\|rom-party-version\\|rom-party-config-directory\\|rom-party-index-extmap-file-name")
-      (let ((start-time (float-time)))
-        (url-copy-file (format rom-party--index-format-url rom-party-version)
-                       (concat (file-name-as-directory rom-party-config-directory) rom-party-index-extmap-file-name)
-                       t)
-        start-time))
-   (lambda (start-time)
-     (let ((finished-time (float-time)))
-       (message "Downloaded index in %.2f seconds" (- finished-time start-time)))
-     (funcall callback))))
+  (let ((start-time (float-time)))
+    (async-start
+     `(lambda ()
+        ,(async-inject-variables "load-path")
+        (require 'rom-party)
+        (let* ((out-file-name (concat (file-name-as-directory rom-party-config-directory)
+                                      rom-party-index-extmap-file-name))
+               (compressed-out-file-name (concat out-file-name ".gz")))
+          (if (executable-find "gunzip")
+              (progn (url-copy-file (format rom-party--compressed-index-format-url rom-party-version)
+                                    compressed-out-file-name
+                                    t)
+                     (shell-command (format "gunzip %s" out-file-name)))
+            (message "gunzip not found on path, downloading uncompressed file...")
+            (url-copy-file (format rom-party--index-format-url rom-party-version)
+                           out-file-name
+                           t))))
+     (lambda (&rest _)
+       (let ((finished-time (float-time)))
+         (message "Downloaded index in %.2f seconds" (- finished-time start-time)))
+       (funcall callback)))))
 
 (defun rom-party--get-or-create-index (callback)
   "Create an index if necessay and then call CALLBACK."
