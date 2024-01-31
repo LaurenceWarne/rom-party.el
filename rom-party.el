@@ -263,7 +263,8 @@ It's purpose is for use with `rom-party-weight-function'."
 (defun rom-party--select-prompt ()
   "Select a random prompt."
   (let* ((choice (seq-random-elt (rom-party--prompts)))
-         (matching (extmap-get rom-party--extmap (intern choice))))
+         (all-words (rom-party--all-words))
+         (matching (--map (elt all-words it) (extmap-get rom-party--extmap (intern choice)))))
     (or (and (listp matching)
              (funcall rom-party-prompt-filter choice matching)
              choice)
@@ -433,11 +434,15 @@ The first table is modified in place."
                                   (cons idx (ht-get substring-table it)))))))))
     substring-table))
 
+(defun rom-party--all-words ()
+  "Return a vector of all valid rom party words."
+  (extmap-get rom-party--extmap rom-party--all-words-key))
+
 (defun rom-party--input-activated (&rest _ignore)
   "Process the result of a user enter."
   (unless rom-party--game-over
     (if-let* ((user-attempt (s-trim (downcase (widget-value rom-party--input))))
-              (all-words (extmap-get rom-party--extmap rom-party--all-words-key))
+              (all-words (rom-party--all-words))
               (idx (rom-party--binary-search user-attempt all-words #'string<))
               ((and (-contains-p (extmap-get rom-party--extmap (intern rom-party--prompt)) idx)
                     (s-contains-p rom-party--prompt user-attempt))))
@@ -630,7 +635,7 @@ If VALUE is not present in VECTOR, return nil."
   "Hint solutions for the current prompt in the echo area."
   (interactive)
   (let* ((valid-idxs (extmap-get rom-party--extmap (intern rom-party--prompt)))
-         (valid (--map (aref (extmap-get rom-party--extmap rom-party--all-words-key) it) valid-idxs)))
+         (valid (--map (aref (rom-party--all-words) it) valid-idxs)))
     (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
 
 ;;;###autoload
