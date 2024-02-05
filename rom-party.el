@@ -23,7 +23,7 @@
 
 ;; The main entry point to the package is the command `rom-party' which
 ;; will start a new game.  The objective of the game is, given a two or
-;; three letter prompt, to find any word containg that prompt as a
+;; three letter prompt, to find any word containing that prompt as a
 ;; substring in the given time limit (as in https://jklm.fun/).
 
 ;; The difficulty of the game can be configured by the user custom
@@ -413,7 +413,7 @@ The first table is modified in place."
     first))
 
 (defun rom-party--substring-frequencies (words word-hashtable)
-  "Calculate substring frequences from WORDS as a hash table, using WORD-HASHTABLE."
+  "Calculate substring frequencies from WORDS as a hash table, using WORD-HASHTABLE."
   (let ((substring-table (ht-create #'equal)))
     (-each words
       (lambda (word)
@@ -540,7 +540,7 @@ The first table is modified in place."
         (cl-decf rom-party--lives)
         (if (<= rom-party--lives 0)
             (rom-party--process-no-lives)
-          (message "Times up!")
+          (message "Time's up!")
           (when rom-party-skip-on-end-of-timer (rom-party-skip)))))))
 
 (defun rom-party--process-no-lives ()
