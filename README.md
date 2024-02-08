@@ -11,6 +11,7 @@ https://github.com/LaurenceWarne/rom-party.el/assets/17688577/396f71fb-6f6c-4c88
 
 ```elisp
 (use-package rom-party
+  :commands (rom-party rom-party-infinite rom-party-choose-configuration)
   :config
   (setq rom-party-timer-seconds 10
         ;; `rom-party-config-directory' is used to store word files and index files
