@@ -540,7 +540,7 @@ The first table is modified in place."
         (cl-decf rom-party--lives)
         (if (<= rom-party--lives 0)
             (rom-party--process-no-lives)
-          (message "Time's up!")
+          (unless (string= (current-message) (rom-party--hint-string)) (message "Time's up!"))
           (when rom-party-skip-on-end-of-timer (rom-party-skip)))))))
 
 (defun rom-party--process-no-lives ()
@@ -624,6 +624,12 @@ If VALUE is not present in VECTOR, return nil."
                (setq low (1+ middle)))
               (t (cl-return middle)))))))
 
+(defun rom-party--hint-string ()
+  "Get the string consisting of a list of solutions for the current rom party word."
+  (let* ((valid-idxs (extmap-get rom-party--extmap (intern rom-party--prompt)))
+         (valid (--map (aref (rom-party--all-words) it) valid-idxs)))
+    (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid)))))
+
 ;;; Commands
 
 (defun rom-party-skip ()
@@ -634,9 +640,7 @@ If VALUE is not present in VECTOR, return nil."
 (defun rom-party-hint ()
   "Hint solutions for the current prompt in the echo area."
   (interactive)
-  (let* ((valid-idxs (extmap-get rom-party--extmap (intern rom-party--prompt)))
-         (valid (--map (aref (rom-party--all-words) it) valid-idxs)))
-    (message (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid))))))
+  (message (rom-party--hint-string)))
 
 ;;;###autoload
 (defun rom-party ()
