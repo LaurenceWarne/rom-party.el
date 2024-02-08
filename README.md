@@ -1,4 +1,4 @@
-[![Min Emacs Version](https://img.shields.io/badge/Emacs-28+-7F5AB6?logo=gnu-emacs)](https://www.gnu.org/software/emacs/)
+[![Min Emacs Version](https://img.shields.io/badge/Emacs-28+-7F5AB6?logo=gnu-emacs)](https://www.gnu.org/software/emacs/) [![MELPA](https://melpa.org/packages/rom-party-badge.svg)](https://melpa.org/#/rom-party)
 
 # rom-party.el
 
@@ -7,6 +7,8 @@
 https://github.com/LaurenceWarne/rom-party.el/assets/17688577/396f71fb-6f6c-4c88-8dd6-f0526c02463c
 
 ## Installation
+
+`rom-party` is available from [Melpa](https://melpa.org/):
 
 ```elisp
 (use-package rom-party

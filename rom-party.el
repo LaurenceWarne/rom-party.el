@@ -413,7 +413,7 @@ The first table is modified in place."
     first))
 
 (defun rom-party--substring-frequencies (words word-hashtable)
-  "Calculate substring frequencies from WORDS as a hash table, using WORD-HASHTABLE."
+  "Calculate substring frequencies from WORDS using WORD-HASHTABLE."
   (let ((substring-table (ht-create #'equal)))
     (-each words
       (lambda (word)
