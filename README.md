@@ -1,6 +1,5 @@
-[![Min Emacs Version](https://img.shields.io/badge/Emacs-28+-7F5AB6?logo=gnu-emacs)](https://www.gnu.org/software/emacs/) [![MELPA](https://melpa.org/packages/rom-party-badge.svg)](https://melpa.org/#/rom-party)
-
 # rom-party.el
+[![Min Emacs Version](https://img.shields.io/badge/Emacs-28+-7F5AB6?logo=gnu-emacs)](https://www.gnu.org/software/emacs/) [![MELPA](https://melpa.org/packages/rom-party-badge.svg)](https://melpa.org/#/rom-party)
 
 [:bomb: Party](https://jklm.fun/)... in Emacs:
 
