@@ -29,6 +29,10 @@ https://github.com/LaurenceWarne/rom-party.el/assets/17688577/396f71fb-6f6c-4c88
 
 There is another command `rom-party-infinite` which is the same as above, but with no timer or lives.  To look at all preset configurations see `rom-party-choose-configuration`.
 
+### Chosen Words
+
+You may mark a word as a "goto" for a certain prompt using the command: `rom-party-add-chosen-word`.  From then on, this word will be shown first in `rom-party-hint` and echoed when time runs out for that prompt.
+
 ## Customization
 
 If you're finding it too difficult (or too easy!), the best way to alter the difficulty is by modifying `rom-party-prompt-filter`.  The function takes a candidate prompt (e.g. `ggi`) and the words matching it - a `nil` value means don't use the prompt.  E.g.

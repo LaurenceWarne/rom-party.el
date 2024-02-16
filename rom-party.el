@@ -44,6 +44,7 @@
 (require 'f)
 (require 'ht)
 (require 's)
+(require 'savehist)
 (require 'wid-edit)
 (require 'widget)
 (require 'url)
@@ -208,6 +209,9 @@ alternatively you may define your own, see `rom-party-configuration'."
   "M-s"           #'rom-party-skip
   "q"             #'kill-this-buffer)
 
+(defvar rom-party--chosen-words nil)
+(add-to-list 'savehist-additional-variables 'rom-party--chosen-words)
+
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--prompt nil)
 (defvar-local rom-party--lives rom-party-starting-lives)
@@ -244,6 +248,10 @@ alternatively you may define your own, see `rom-party-configuration'."
 (defface rom-party-game-over
   '((t (:bold t :underline t)))
   "Face used for the game over title in a rom party buffer.")
+
+(defface rom-party-chosen-word
+  '((t (:bold t :foreground "gold")))
+  "Face used for the chosen words when they are echoed.")
 
 ;; Functions
 
@@ -540,7 +548,10 @@ The first table is modified in place."
         (cl-decf rom-party--lives)
         (if (<= rom-party--lives 0)
             (rom-party--process-no-lives)
-          (unless (string= (current-message) (rom-party--hint-string)) (message "Time's up!"))
+          (unless (string= (current-message) (rom-party--hint-string))
+            (if-let ((word (rom-party--chosen-word-string rom-party--prompt)))
+                (message "Time's up!  Chosen word %s" word)
+              (message "Time's up!")))
           (when rom-party-skip-on-end-of-timer (rom-party-skip)))))))
 
 (defun rom-party--process-no-lives ()
@@ -624,11 +635,25 @@ If VALUE is not present in VECTOR, return nil."
                (setq low (1+ middle)))
               (t (cl-return middle)))))))
 
+(defun rom-party--valid-for (prompt)
+  "Return a list of all words valid for PROMPT."
+  (let* ((valid-idxs (extmap-get rom-party--extmap (intern prompt))))
+    (--map (aref (rom-party--all-words) it) valid-idxs)))
+
+(defun rom-party--chosen-word-string (prompt)
+  "Return the chosen word for PROMPT as a string if it exists, else return nil."
+  (when-let ((word (alist-get prompt rom-party--chosen-words nil nil #'string=)))
+    (propertize word 'face 'rom-party-chosen-word)))
+
 (defun rom-party--hint-string ()
   "Get the string consisting of a list of solutions for the current rom party word."
-  (let* ((valid-idxs (extmap-get rom-party--extmap (intern rom-party--prompt)))
-         (valid (--map (aref (rom-party--all-words) it) valid-idxs)))
-    (s-join ", " (-take 10 (--sort (< (length it) (length other)) valid)))))
+  (let* ((valid (rom-party--valid-for rom-party--prompt))
+         (chosen-word-str (rom-party--chosen-word-string rom-party--prompt))
+         (filtered (--filter (not (string= it chosen-word-str)) valid)))
+    (concat
+     chosen-word-str
+     (when chosen-word-str ", ")
+     (s-join ", " (-take 10 (--sort (< (length it) (length other)) filtered))))))
 
 ;;; Commands
 
@@ -641,6 +666,15 @@ If VALUE is not present in VECTOR, return nil."
   "Hint solutions for the current prompt in the echo area."
   (interactive)
   (message (rom-party--hint-string)))
+
+(defun rom-party-add-chosen-word (chosen-word)
+  "Set CHOSEN-WORD as the chosen word for the current prompt.
+
+Chosen words will be echoed (if one exists) when time runs out for a prompt."
+  (interactive
+   (list
+    (completing-read "Word: " (rom-party--valid-for rom-party--prompt))))
+  (map-put! rom-party--chosen-words rom-party--prompt chosen-word))
 
 ;;;###autoload
 (defun rom-party ()
