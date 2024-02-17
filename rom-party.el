@@ -658,7 +658,7 @@ If VALUE is not present in VECTOR, return nil."
 
 (defun rom-party--chosen-word-string (prompt)
   "Return the chosen word for PROMPT as a string if it exists, else return nil."
-  (when-let ((word (plist-get rom-party--chosen-words prompt #'string=)))
+  (when-let ((word (compat-call plist-get rom-party--chosen-words prompt #'string=)))
     (propertize word 'face 'rom-party-chosen-word)))
 
 (defun rom-party--hint-string ()
@@ -691,7 +691,7 @@ Chosen words will be echoed (if one exists) when time runs out for a prompt."
    (list
     (completing-read "Word: " (rom-party--valid-for rom-party--prompt))))
   (setq rom-party--chosen-words
-        (plist-put rom-party--chosen-words rom-party--prompt chosen-word #'string=)))
+        (compat-call plist-put rom-party--chosen-words rom-party--prompt chosen-word #'string=)))
 
 ;;;###autoload
 (defun rom-party ()
