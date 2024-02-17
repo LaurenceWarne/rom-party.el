@@ -187,6 +187,8 @@ alternatively you may define your own, see `rom-party-configuration'."
 (defconst rom-party--compressed-index-format-url
   "https://github.com/LaurenceWarne/rom-party.el/releases/download/%s/index.extmap.gz")
 (defconst rom-party-index-extmap-file-name "index.extmap")
+(defconst rom-party--source-dir (file-name-directory (file-truename (or load-file-name (buffer-file-name)))))
+(defconst rom-party--packaged-index-file-name (f-join rom-party--source-dir (concat rom-party-index-extmap-file-name "gz")))
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
@@ -356,23 +358,34 @@ It's purpose is for use with `rom-party-weight-function'."
          (message "Downloaded index in %.2f seconds" (- finished-time start-time)))
        (funcall callback)))))
 
+(defun rom-party--decompress (in-file out-file)
+  "Decompress IN-FILE to OUT-FILE."
+  (shell-command (format "gunzip -c %s > %s" in-file out-file)))
+
+(defun rom-party--index-from-package ()
+  "Decompress the packaged rom-party index file."
+  (let ((out-file-name (rom-party-index-path)))
+    (rom-party--decompress rom-party--packaged-index-file-name out-file-name)))
+
 (defun rom-party--download-index ()
-  "Download the rom party index."
-  (let ((start-time (float-time)))
-    (let* ((out-file-name (concat (file-name-as-directory rom-party-config-directory)
-                                  rom-party-index-extmap-file-name))
-           (compressed-out-file-name (concat out-file-name ".gz")))
+  "Decompress a packaged rom party index, else download one."
+  (cl-flet ((decompress (in-file out-file)
+              (message "Extracting %s to %s" in-file out-file)
+              (shell-command (format "gunzip -c %s > %s" in-file out-file))))
+    (let* ((start-time (float-time))
+           (out-path (rom-party-index-path))
+           (compressed-out-path (concat out-path ".gz")))
       (if (executable-find "gunzip")
           (progn (url-copy-file (format rom-party--compressed-index-format-url rom-party-version)
-                                compressed-out-file-name
+                                compressed-out-path
                                 t)
-                 (message "Extracting %s" compressed-out-file-name)
-                 (shell-command (format "gunzip %s" out-file-name)))
+                 (message "Extracting %s to %s" compressed-out-path out-path)
+                 (decompress compressed-out-path out-path))
         (message "gunzip not found on path, downloading uncompressed file...")
         (url-copy-file (format rom-party--index-format-url rom-party-version)
-                       out-file-name
+                       out-path
                        t))
-      (message "Downloaded index in %.2f seconds" (- (float-time) start-time)))))
+      (message "Downloaded/extracted index in %.2f seconds" (- (float-time) start-time)))))
 
 (defun rom-party--get-or-create-index (callback)
   "Create an index if necessay and then call CALLBACK."
@@ -385,7 +398,10 @@ It's purpose is for use with `rom-party-weight-function'."
                 (setq rom-party--extmap (extmap-init index-path))
                 (funcall callback)))
       (cond
-       ;; TODO do a version check here too
+       ;; Extract compressed index from package installation
+       ((and (executable-find "gunzip") (f-exists-p rom-party--packaged-index-file-name))
+        (rom-party--index-from-package))
+       ;; Download index
        ((and rom-party--download-index
              (null file-exists)
              (equal (eval (car (get 'rom-party-word-sources 'standard-value))) rom-party-word-sources))
@@ -642,7 +658,7 @@ If VALUE is not present in VECTOR, return nil."
 
 (defun rom-party--chosen-word-string (prompt)
   "Return the chosen word for PROMPT as a string if it exists, else return nil."
-  (when-let ((word (alist-get prompt rom-party--chosen-words nil nil #'string=)))
+  (when-let ((word (plist-get rom-party--chosen-words prompt #'string=)))
     (propertize word 'face 'rom-party-chosen-word)))
 
 (defun rom-party--hint-string ()
@@ -674,7 +690,8 @@ Chosen words will be echoed (if one exists) when time runs out for a prompt."
   (interactive
    (list
     (completing-read "Word: " (rom-party--valid-for rom-party--prompt))))
-  (map-put! rom-party--chosen-words rom-party--prompt chosen-word))
+  (setq rom-party--chosen-words
+        (plist-put rom-party--chosen-words rom-party--prompt chosen-word #'string=)))
 
 ;;;###autoload
 (defun rom-party ()
