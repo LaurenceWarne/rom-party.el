@@ -188,7 +188,7 @@ alternatively you may define your own, see `rom-party-configuration'."
   "https://github.com/LaurenceWarne/rom-party.el/releases/download/%s/index.extmap.gz")
 (defconst rom-party-index-extmap-file-name "index.extmap")
 (defconst rom-party--source-dir (file-name-directory (file-truename (or load-file-name (buffer-file-name)))))
-(defconst rom-party--packaged-index-file-name (f-join rom-party--source-dir (concat rom-party-index-extmap-file-name "gz")))
+(defconst rom-party--packaged-index-path (f-join rom-party--source-dir (concat rom-party-index-extmap-file-name ".gz")))
 
 (defvar rom-party--extmap nil)
 (defvar rom-party--words nil)
@@ -364,28 +364,26 @@ It's purpose is for use with `rom-party-weight-function'."
 
 (defun rom-party--index-from-package ()
   "Decompress the packaged rom-party index file."
-  (let ((out-file-name (rom-party-index-path)))
-    (rom-party--decompress rom-party--packaged-index-file-name out-file-name)))
+  (let ((out-path (rom-party-index-path)))
+    (message "Extracting %s to %s" rom-party--packaged-index-path out-path)
+    (rom-party--decompress rom-party--packaged-index-path out-path)))
 
 (defun rom-party--download-index ()
   "Decompress a packaged rom party index, else download one."
-  (cl-flet ((decompress (in-file out-file)
-              (message "Extracting %s to %s" in-file out-file)
-              (shell-command (format "gunzip -c %s > %s" in-file out-file))))
-    (let* ((start-time (float-time))
-           (out-path (rom-party-index-path))
-           (compressed-out-path (concat out-path ".gz")))
-      (if (executable-find "gunzip")
-          (progn (url-copy-file (format rom-party--compressed-index-format-url rom-party-version)
-                                compressed-out-path
-                                t)
-                 (message "Extracting %s to %s" compressed-out-path out-path)
-                 (decompress compressed-out-path out-path))
-        (message "gunzip not found on path, downloading uncompressed file...")
-        (url-copy-file (format rom-party--index-format-url rom-party-version)
-                       out-path
-                       t))
-      (message "Downloaded/extracted index in %.2f seconds" (- (float-time) start-time)))))
+  (let* ((start-time (float-time))
+         (out-path (rom-party-index-path))
+         (compressed-out-path (concat out-path ".gz")))
+    (if (executable-find "gunzip")
+        (progn (url-copy-file (format rom-party--compressed-index-format-url rom-party-version)
+                              compressed-out-path
+                              t)
+               (message "Extracting %s to %s" compressed-out-path out-path)
+               (rom-party--decompress compressed-out-path out-path))
+      (message "gunzip not found on path, downloading uncompressed file...")
+      (url-copy-file (format rom-party--index-format-url rom-party-version)
+                     out-path
+                     t))
+    (message "Downloaded/extracted index in %.2f seconds" (- (float-time) start-time))))
 
 (defun rom-party--get-or-create-index (callback)
   "Create an index if necessay and then call CALLBACK."
@@ -399,8 +397,9 @@ It's purpose is for use with `rom-party-weight-function'."
                 (funcall callback)))
       (cond
        ;; Extract compressed index from package installation
-       ((and (executable-find "gunzip") (f-exists-p rom-party--packaged-index-file-name))
-        (rom-party--index-from-package))
+       ((and (executable-find "gunzip") (f-exists-p rom-party--packaged-index-path))
+        (rom-party--index-from-package)
+        (finish))
        ;; Download index
        ((and rom-party--download-index
              (null file-exists)
