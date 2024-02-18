@@ -20,7 +20,7 @@ https://github.com/LaurenceWarne/rom-party.el/assets/17688577/396f71fb-6f6c-4c88
 
 ## Usage
 
-`M-x rom-party` - note `rom-party.el` requires some initial indexing when first run and whenever the custom variable `rom-party-word-sources` is updated.  In a rom party buffer the following keybindings are also provided:
+`M-x rom-party`, in a rom party buffer the following keybindings are also provided:
 
 | Key   | Description                           |
 |-------|---------------------------------------|
@@ -43,7 +43,7 @@ If you're finding it too difficult (or too easy!), the best way to alter the dif
 
 Means any prompts with less than 10 matching solutions are not shown.
 
-Where `rom-party` gets words from can be customised using `rom-party-word-sources`.  Other useful custom variables are given below:
+Where `rom-party` gets words from can be customised using `rom-party-word-sources`, note re-indexing may be required whenever the custom variable `rom-party-word-sources` is updated, which may take 20-30s depending on how large the word sources are.  Other useful custom variables are given below:
 
 | Variable                     | Description                                             | Default                                      |
 |------------------------------|---------------------------------------------------------|----------------------------------------------|

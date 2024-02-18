@@ -64,4 +64,19 @@
                (used-letters (copy-tree rom-party--used-letters)))
            (expect prompt :not :to-be nil)
            (rom-party--insert-solution prompt)
+           (expect rom-party--used-letters :not :to-equal used-letters))))))
+
+  (it "Can set custom word sources"
+    (rom-party--test-setup
+     (let ((rom-party-word-sources
+            (list
+             (cons "sowpods.txt" "http://norvig.com/ngrams/sowpods.txt")
+             (cons "enable1.txt" "http://norvig.com/ngrams/enable1.txt")
+             (cons "word.list" "http://norvig.com/ngrams/word.list"))))
+       (rom-party)
+       (with-current-buffer rom-party-buffer-name
+         (let ((prompt rom-party--prompt)
+               (used-letters (copy-tree rom-party--used-letters)))
+           (expect prompt :not :to-be nil)
+           (rom-party--insert-solution prompt)
            (expect rom-party--used-letters :not :to-equal used-letters)))))))

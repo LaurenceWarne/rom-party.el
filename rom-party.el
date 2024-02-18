@@ -391,30 +391,35 @@ It's purpose is for use with `rom-party-weight-function'."
   (let* ((index-path (rom-party-index-path))
          (file-exists (f-exists-p index-path))
          (do-overwrite (and file-exists (rom-party--word-files-changed)))
-         (create-index (or (null file-exists) do-overwrite)))
+         (create-index (or (null file-exists) do-overwrite))
+         (using-default-sources
+          (equal (eval (car (get 'rom-party-word-sources 'standard-value))) rom-party-word-sources)))
     (cl-flet ((finish ()
                 (setq rom-party--extmap (extmap-init index-path))
                 (funcall callback)))
       (cond
        ;; Extract compressed index from package installation
-       ((and (executable-find "gunzip") (f-exists-p rom-party--packaged-index-path))
+       ((and (null file-exists)
+             (executable-find "gunzip")
+             (f-exists-p rom-party--packaged-index-path)
+             using-default-sources)
         (rom-party--index-from-package)
         (finish))
-       ;; Download index
+       ;; If for some reason the compressed index is not alongside the package, download it
        ((and rom-party--download-index
              (null file-exists)
-             (equal (eval (car (get 'rom-party-word-sources 'standard-value))) rom-party-word-sources))
+             using-default-sources)
         (message "Downloading index...")
         (if rom-party-index-async
             (rom-party--download-index-async #'finish)
           (rom-party--download-index)
           (finish)))
-       ;; Check if we need to manually index (async)
+       ;; We're not using the default sources, manually index async if enabled
        ((and rom-party-index-async create-index)
         (message (if do-overwrite "Word files changed, re-indexing async..."
                    "Performing initial indexing async..."))
         (rom-party--index-words-async #'finish))
-       ;; Check if we need to manually index (sync)
+       ;; We're not using the default sources, manually index sync
        (create-index
         (message (if do-overwrite "Word files changed, re-indexing..."
                    "Performing initial indexing..."))
