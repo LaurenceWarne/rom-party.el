@@ -179,9 +179,9 @@ second, the words matching the prompt."
   :group 'rom-party
   :type 'object)
 
-(defcustom rom-party-training-configuration
+(defcustom rom-party-timed-training-configuration
   (rom-party-training-configuration
-   :name "Train"
+   :name "Training"
    :description "Use words only from rom-party-chosen-words."
    :show-timer t)
   "The \"training\" rom party configuration."
@@ -189,7 +189,10 @@ second, the words matching the prompt."
   :type 'object)
 
 (defcustom rom-party-configurations
-  (list rom-party-classic-configuration rom-party-infinite-configuration)
+  (list
+   rom-party-classic-configuration
+   rom-party-infinite-configuration
+   rom-party-timed-training-configuration)
   "A list of usable rom party configurations."
   :group 'rom-party
   :type '(repeat object))

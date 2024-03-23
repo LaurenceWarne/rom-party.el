@@ -33,6 +33,11 @@ There is another command `rom-party-infinite` which is the same as above, but wi
 
 You may mark a word as a "goto" for a certain prompt using the command: `rom-party-add-chosen-word`.  From then on, this word will be shown first in `rom-party-hint` and echoed when time runs out for that prompt.
 
+The command `rom-party-train` can be used to take prompts solely from words you have added in this way.  Although changes to `rom-party-chosen-words` are persisted between sessions, it may useful to define in your configuration for when machines are switched:
+
+```elisp
+(setq rom-party-chosen-words '("rne" "garner" "tco" "outcome"))
+```
 ## Customization
 
 If you're finding it too difficult (or too easy!), the best way to alter the difficulty is by modifying `rom-party-prompt-filter`.  The function takes a candidate prompt (e.g. `ggi`) and the words matching it - a `nil` value means don't use the prompt.  E.g.
