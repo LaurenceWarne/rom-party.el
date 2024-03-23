@@ -31,7 +31,11 @@ jobs:
     - name: Check out the source code
       uses: actions/checkout@v4
 
-    - name: Test the project
-      run: |
-        eldev -dtT -C compile --warnings-as-errors
-        eldev -s -dtT test
+    - name: Test Byte Compile
+      run: eldev -dtT -C compile --warnings-as-errors
+
+    - name: Lint
+      run: eldev lint
+
+    - name: Run Tests
+      run: eldev -s -dtT test

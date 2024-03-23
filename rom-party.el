@@ -39,6 +39,7 @@
 (require 'cl-lib)
 (require 'compat)
 (require 'dash)
+(require 'eieio)
 (require 'ewoc)
 (require 'extmap)
 (require 'f)
@@ -48,27 +49,6 @@
 (require 'wid-edit)
 (require 'widget)
 (require 'url)
-
-;;; Classes
-
-(defclass rom-party-configuration ()
-  ((name :initarg :name
-         :type string
-         :custom 'string
-         :documentation "The name of this configuration")
-   (description :initarg :description
-                :type string
-                :custom 'string
-                :documentation "A short description of this configuration")
-   (show-timer :initarg :show-timer
-               :type boolean
-               :custom 'boolean
-               :documentation "If non-nil show a timer in rom-party buffers when using this configuration."))
-  "A class holding configuration for rom party, e.g. how to choose prompts.")
-
-(cl-defmethod rom-party-select-prompt ((_configuration rom-party-configuration))
-  "Select a rom party prompt for this configuration."
-  (rom-party--select-prompt))
 
 ;;; Custom variables
 
@@ -109,24 +89,6 @@ the same Emacs session."
   :group 'rom-party
   :type 'integer)
 
-(defcustom rom-party-classic-configuration
-  (rom-party-configuration
-   :name "Classic"
-   :description "Start with two lives, on a five second timer."
-   :show-timer t)
-  "The \"classic\" rom party configuration."
-  :group 'rom-party
-  :type 'object)
-
-(defcustom rom-party-infinite-configuration
-  (rom-party-configuration
-   :name "Infinite"
-   :description "No timer or lives."
-   :show-timer nil)
-  "The \"infinite\" rom party configuration."
-  :group 'rom-party
-  :type 'object)
-
 (defcustom rom-party-timer-seconds 5
   "The number of starting seconds for the rom party timer."
   :group 'rom-party
@@ -151,6 +113,81 @@ second, the words matching the prompt."
   :group 'rom-party
   :type 'function)
 
+(defcustom rom-party-index-async
+  t
+  "If non-nil run indexing asynchronously."
+  :group 'rom-party
+  :type 'boolean)
+
+(define-obsolete-variable-alias
+  'rom-party--chosen-words
+  'rom-party-chosen-words
+  "0.2.0")
+
+(defcustom rom-party-chosen-words nil
+  "A plist mapping prompts to \"GOTO\" words."
+  :group 'rom-party
+  :type '(plist :key-type string :value-type string))
+
+(add-to-list 'savehist-additional-variables 'rom-party-chosen-words)
+
+;;; Classes
+
+(defclass rom-party-configuration ()
+  ((name :initarg :name
+         :type string
+         :custom 'string
+         :documentation "The name of this configuration")
+   (description :initarg :description
+                :type string
+                :custom 'string
+                :documentation "A short description of this configuration")
+   (show-timer :initarg :show-timer
+               :type boolean
+               :custom 'boolean
+               :documentation "If non-nil show a timer in rom-party buffers when using this configuration."))
+  "A class holding configuration for rom party, e.g. how to choose prompts.")
+
+(cl-defmethod rom-party-select-prompt ((_configuration rom-party-configuration))
+  "Select a rom party prompt for this configuration."
+  (rom-party--select-prompt))
+
+(defclass rom-party-training-configuration (rom-party-configuration)
+  nil)
+
+(cl-defmethod rom-party-select-prompt ((_configuration rom-party-training-configuration))
+  "Select a rom party prompt for this configuration."
+  (if (null rom-party-chosen-words)
+      (user-error "You must first add words to rom-party-chosen-words to use the training configuration")
+    (car (seq-random-elt (-partition 2 rom-party-chosen-words)))))
+
+(defcustom rom-party-classic-configuration
+  (rom-party-configuration
+   :name "Classic"
+   :description "Start with two lives, on a five second timer."
+   :show-timer t)
+  "The \"classic\" rom party configuration."
+  :group 'rom-party
+  :type 'object)
+
+(defcustom rom-party-infinite-configuration
+  (rom-party-configuration
+   :name "Infinite"
+   :description "No timer or lives."
+   :show-timer nil)
+  "The \"infinite\" rom party configuration."
+  :group 'rom-party
+  :type 'object)
+
+(defcustom rom-party-training-configuration
+  (rom-party-training-configuration
+   :name "Train"
+   :description "Use words only from rom-party-chosen-words."
+   :show-timer t)
+  "The \"training\" rom party configuration."
+  :group 'rom-party
+  :type 'object)
+
 (defcustom rom-party-configurations
   (list rom-party-classic-configuration rom-party-infinite-configuration)
   "A list of usable rom party configurations."
@@ -168,12 +205,6 @@ See `rom-party-configurations' for a list of available configurations,
 alternatively you may define your own, see `rom-party-configuration'."
   :group 'rom-party
   :type 'object)
-
-(defcustom rom-party-index-async
-  t
-  "If non-nil run indexing asynchronously."
-  :group 'rom-party
-  :type 'boolean)
 
 ;;; Constants
 
@@ -210,9 +241,6 @@ alternatively you may define your own, see `rom-party-configuration'."
   "r"             #'rom-party-skip
   "M-s"           #'rom-party-skip
   "q"             #'kill-this-buffer)
-
-(defvar rom-party--chosen-words nil)
-(add-to-list 'savehist-additional-variables 'rom-party--chosen-words)
 
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--prompt nil)
@@ -266,7 +294,7 @@ It's purpose is for use with `rom-party-weight-function'."
 ;; Internal functions
 
 (defun rom-party--prompts ()
-  "Return all possible rom party prompts."
+  "Return every prompt usable by rom party."
   (let ((key-names (-map #'symbol-name (extmap-keys rom-party--extmap))))
     (--filter (not (s-prefix-p "__" it)) key-names)))
 
@@ -662,7 +690,7 @@ If VALUE is not present in VECTOR, return nil."
 
 (defun rom-party--chosen-word-string (prompt)
   "Return the chosen word for PROMPT as a string if it exists, else return nil."
-  (when-let ((word (compat-call plist-get rom-party--chosen-words prompt #'string=)))
+  (when-let ((word (compat-call plist-get rom-party-chosen-words prompt #'string=)))
     (propertize word 'face 'rom-party-chosen-word)))
 
 (defun rom-party--hint-string ()
@@ -694,8 +722,8 @@ Chosen words will be echoed (if one exists) when time runs out for a prompt."
   (interactive
    (list
     (completing-read "Word: " (rom-party--valid-for rom-party--prompt))))
-  (setq rom-party--chosen-words
-        (compat-call plist-put rom-party--chosen-words rom-party--prompt chosen-word #'string=)))
+  (setq rom-party-chosen-words
+        (compat-call plist-put rom-party-chosen-words rom-party--prompt chosen-word #'string=)))
 
 ;;;###autoload
 (defun rom-party ()
@@ -712,6 +740,13 @@ Chosen words will be echoed (if one exists) when time runs out for a prompt."
   "Run rom party with no timer or lives."
   (interactive)
   (let ((rom-party-default-configuration rom-party-infinite-configuration))
+    (call-interactively #'rom-party)))
+
+;;;###autoload
+(defun rom-party-train ()
+  "Run rom party with no timer or lives."
+  (interactive)
+  (let ((rom-party-default-configuration rom-party-training-configuration))
     (call-interactively #'rom-party)))
 
 ;;;###autoload
