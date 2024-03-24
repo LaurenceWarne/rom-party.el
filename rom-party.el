@@ -749,7 +749,7 @@ Chosen words will be echoed (if one exists) when time runs out for a prompt."
 (defun rom-party-train ()
   "Run rom party with no timer or lives."
   (interactive)
-  (let ((rom-party-default-configuration rom-party-training-configuration))
+  (let ((rom-party-default-configuration rom-party-timed-training-configuration))
     (call-interactively #'rom-party)))
 
 ;;;###autoload
