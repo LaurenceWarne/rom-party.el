@@ -46,7 +46,7 @@ If you're finding it too difficult (or too easy!), the best way to alter the dif
 (setq rom-party-prompt-filter (lambda (prompt words) (>= (length words) 50)))
 ```
 
-Means any prompts with less than 10 matching solutions are not shown.
+Means any prompts with less than 50 matching solutions are not shown.
 
 Where `rom-party` gets words from can be customised using `rom-party-word-sources`, note re-indexing may be required whenever the custom variable `rom-party-word-sources` is updated, which may take 20-30s depending on how large the word sources are.  Other useful custom variables are given below:
 

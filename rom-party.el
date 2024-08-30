@@ -30,9 +30,6 @@
 ;; variable `rom-party-prompt-filter', see the docstring for more
 ;; information.
 
-;; Note by default on first invocation, `rom-party' will download a
-;; remote index file asynchronously and so may not start straight away.
-
 ;;; Code:
 
 (require 'async)

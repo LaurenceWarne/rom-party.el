@@ -16,8 +16,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         emacs_version:
           - 28.2
-          - 29.1
-          - 29.2
+          - 29.4
 
     steps:
     - name: Set up Emacs
