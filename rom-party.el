@@ -240,7 +240,7 @@ alternatively you may define your own, see `rom-party-configuration'."
 (defvar-keymap rom-party--game-over-keymap
   "r"             #'rom-party-skip
   "M-s"           #'rom-party-skip
-  "q"             #'kill-this-buffer)
+  "q"             #'kill-current-buffer)
 
 (defvar-local rom-party--input nil)
 (defvar-local rom-party--prompt nil)
